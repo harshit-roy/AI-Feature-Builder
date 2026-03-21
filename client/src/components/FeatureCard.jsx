@@ -1,62 +1,144 @@
 import { Link } from "react-router-dom"
+import {
+  FaArrowRight,
+  FaClock,
+  FaGear,
+  FaCircleCheck,
+  FaRocket,
+  FaCircleXmark
+} from "react-icons/fa6"
 
 export default function FeatureCard({ feature, darkMode = false }) {
   const cardClass = darkMode
-    ? "bg-white/10 border border-gray-800 text-white"
-    : "bg-white border border-gray-200 text-black"
+    ? "bg-white/10 border border-white/10 text-white"
+    : "bg-white border border-[#E6EBF5] text-[#1F2A44]"
+
+  const mutedTextClass = darkMode ? "text-slate-300" : "text-[#64748B]"
+  const subtleBgClass = darkMode ? "bg-white/10" : "bg-[#F8FAFF]"
 
   const getStatusClass = (status) => {
     switch (status) {
       case "pending":
-        return "bg-yellow-100 text-yellow-800"
+        return darkMode
+          ? "bg-yellow-400/15 text-yellow-200 border border-yellow-400/20"
+          : "bg-amber-50 text-amber-700 border border-amber-100"
       case "generating":
-        return "bg-blue-100 text-blue-800"
+        return darkMode
+          ? "bg-blue-400/15 text-blue-200 border border-blue-400/20"
+          : "bg-blue-50 text-blue-700 border border-blue-100"
       case "preview-ready":
       case "approved":
-        return "bg-green-100 text-green-800"
+        return darkMode
+          ? "bg-emerald-400/15 text-emerald-200 border border-emerald-400/20"
+          : "bg-emerald-50 text-emerald-700 border border-emerald-100"
       case "deployed":
-        return "bg-purple-100 text-purple-800"
+        return darkMode
+          ? "bg-violet-400/15 text-violet-200 border border-violet-400/20"
+          : "bg-violet-50 text-violet-700 border border-violet-100"
       case "rejected":
       case "failed":
-        return "bg-red-100 text-red-800"
+        return darkMode
+          ? "bg-red-400/15 text-red-200 border border-red-400/20"
+          : "bg-red-50 text-red-700 border border-red-100"
       default:
-        return "bg-gray-100 text-gray-800"
+        return darkMode
+          ? "bg-white/10 text-slate-200 border border-white/10"
+          : "bg-slate-100 text-slate-700 border border-slate-200"
     }
   }
 
-  return (
-    <div className={`rounded-xl p-5 shadow-lg ${cardClass}`}>
-      <h3 className="text-lg font-semibold mb-3">{feature.prompt}</h3>
+  const getStatusMeta = (status) => {
+    switch (status) {
+      case "pending":
+        return {
+          icon: <FaClock />,
+          text: "Your request is in progress...",
+          textClass: darkMode ? "text-yellow-200" : "text-amber-700"
+        }
+      case "generating":
+        return {
+          icon: <FaGear className="animate-spin" />,
+          text: "AI is generating your feature...",
+          textClass: darkMode ? "text-blue-200" : "text-blue-700"
+        }
+      case "approved":
+      case "preview-ready":
+        return {
+          icon: <FaCircleCheck />,
+          text: "Ready for admin review and deployment",
+          textClass: darkMode ? "text-emerald-200" : "text-emerald-700"
+        }
+      case "deployed":
+        return {
+          icon: <FaRocket />,
+          text: "This page is deployed and available live",
+          textClass: darkMode ? "text-violet-200" : "text-violet-700"
+        }
+      case "rejected":
+      case "failed":
+        return {
+          icon: <FaCircleXmark />,
+          text: "Request rejected",
+          textClass: darkMode ? "text-red-200" : "text-red-700"
+        }
+      default:
+        return {
+          icon: <FaClock />,
+          text: "Status unavailable",
+          textClass: mutedTextClass
+        }
+    }
+  }
 
-      <div className="mb-3">
-        <span className={`px-3 py-1 rounded-full text-xs font-bold ${getStatusClass(feature.status)}`}>
-          {feature.status?.toUpperCase()}
+  const statusMeta = getStatusMeta(feature.status)
+  const title = feature.displayName || feature.prompt || "Untitled feature"
+  const previewText =
+    title.length > 110 ? `${title.slice(0, 110)}...` : title
+
+  return (
+    <div
+      className={`group rounded-[24px] p-5 shadow-[0_16px_35px_rgba(31,42,68,0.08)] transition hover:-translate-y-1 ${cardClass}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${mutedTextClass}`}>
+            Feature Request
+          </p>
+          <h3 className="mt-2 text-lg font-bold leading-7 break-words">
+            {previewText}
+          </h3>
+        </div>
+
+        <span
+          className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${getStatusClass(
+            feature.status
+          )}`}
+        >
+          {feature.status?.replace("-", " ")}
         </span>
       </div>
 
-      {feature.status === "pending" && (
-        <p className="text-sm text-yellow-300">🚧 Your request is in progress...</p>
-      )}
+      <div className={`mt-4 rounded-2xl p-4 ${subtleBgClass}`}>
+        <div className={`flex items-start gap-3 text-sm font-medium ${statusMeta.textClass}`}>
+          <span className="mt-0.5 shrink-0 text-sm">{statusMeta.icon}</span>
+          <span className="leading-6">{statusMeta.text}</span>
+        </div>
+      </div>
 
-      {feature.status === "generating" && (
-        <p className="text-sm text-blue-300">⚙️ AI is generating your feature...</p>
-      )}
-
-      {(feature.status === "approved" || feature.status === "preview-ready") && (
-        <p className="text-sm text-green-300">✅ Ready for admin review and deployment</p>
-      )}
-
-      {feature.status === "deployed" && feature.pageSlug && (
-        <Link
-          to={`/live/${feature.pageSlug}`}
-          className="inline-block mt-3 text-sm text-cyan-300 hover:underline"
-        >
-          Open deployed page
-        </Link>
-      )}
-
-      {feature.status === "rejected" && (
-        <p className="text-sm text-red-300">❌ Request rejected</p>
+      {feature.pageSlug && feature.status === "deployed" && (
+        <div className="mt-4">
+          <Link
+            to={`/live/${feature.pageSlug}`}
+            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+              darkMode
+                ? "bg-white/10 text-white hover:bg-white/15"
+                : "bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] text-white shadow-[0_12px_24px_rgba(109,93,246,0.22)] hover:opacity-95"
+            }`}
+          >
+            Open deployed page
+            <FaArrowRight className="text-xs" />
+          </Link>
+        </div>
       )}
     </div>
   )

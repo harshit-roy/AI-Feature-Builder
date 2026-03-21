@@ -12,7 +12,7 @@ import LandingPage from "./pages/LandingPage"
 
 function AppLayout() {
   const location = useLocation()
-  const hideNavbar = location.pathname === "/"
+  const hideNavbar = location.pathname === "/" || location.pathname === "/login" || location.pathname === "/signup"
 
   return (
     <>

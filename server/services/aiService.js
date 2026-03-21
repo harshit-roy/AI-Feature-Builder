@@ -10,54 +10,99 @@ async function generateReactPage(prompt) {
     })
 
     const fullPrompt = `
-    You are a senior frontend engineer and UI designer.
+        You are a senior frontend engineer, product designer, and UI/UX specialist.
 
-Generate a modern React functional component.
+        Your task is to generate a complete, polished, responsive React webpage as a single functional component.
 
-STRICT RULES:
+        STRICT OUTPUT RULES:
 
-1. Create ONLY one component named GeneratedPage.
-2. Do NOT create any other components.
-3. Do NOT write import statements.
-4. Do NOT write export statements.
-5. Do NOT create an App component.
-8. Output must be valid JSX that compiles in a React environment.
-9. All UI must be contained inside the GeneratedPage component.
-10. The component must return a single root <div>.
+        1. Create ONLY one component named GeneratedPage.
+        2. Do NOT create any other components.
+        3. Do NOT write any import statements.
+        4. Do NOT write any export statements.
+        5. Do NOT create an App component.
+        6. Output must be valid JSX that compiles in a React environment.
+        7. All UI and logic must be contained inside the GeneratedPage component.
+        8. The component must return a single root <div>.
+        9. Return ONLY React code.
+        10. Do NOT include markdown fences.
+        11. Do NOT include explanations or comments outside the code.
 
-STYLING:
+        REACT RULES:
 
-- DO NOT use Tailwind CSS.
+        1. If state is needed, use React.useState.
+        2. If effects are needed, use React.useEffect.
+        3. Do NOT assume external libraries are available.
+        4. Use only standard React and browser APIs.
+        5. Code must not crash if rendered directly.
+        6. Avoid complex unsupported APIs.
+        7. Do NOT use dangerouslySetInnerHTML.
+        8. Do NOT fetch external APIs, external images, or remote assets.
+        9. Keep all data self-contained inside the component.
 
-  Instead use:
-  - inline styles
-  - or a <style> block inside the component.
-- The preview environment does not support Tailwind.
-- Use modern colors, spacing, rounded corners and shadows manually.
+        STYLING RULES:
 
-FUNCTIONALITY:
+        1. DO NOT use Tailwind CSS.
+        2. DO NOT use external CSS files.
+        3. Use inline styles and/or a <style>{\`...\`}</style> block inside the component.
+        4. Create a premium modern UI using:
+          - clean spacing
+          - visual hierarchy
+          - rounded corners
+          - soft shadows
+          - responsive layout
+          - strong typography
+          - accessible contrast
+        5. The page must be fully responsive for mobile, tablet, and desktop.
+        6. Use a professional color palette.
+        7. Avoid ugly default browser styling.
 
-• If the feature requires interaction, implement it fully.
-• Buttons, forms, calculators, toggles, and inputs must work correctly.
-• Manage state properly with React hooks.
+        PAGE QUALITY RULES:
 
-OUTPUT FORMAT (EXACTLY):
+        1. Generate a FULL webpage, not a tiny widget or incomplete section.
+        2. The output should feel like a real usable page, not a demo fragment.
+        3. Include enough sections/content to make the page feel complete.
+        4. If the user request is vague, infer a sensible complete page structure.
+        5. Prefer realistic UI copy and labels over placeholder lorem ipsum.
+        6. The page should look portfolio-quality and production-inspired.
 
-const GeneratedPage = () => {
-  return (
-    <div>
-      Your UI here
-    </div>
-  )
-}
+        FUNCTIONALITY RULES:
 
-Feature to build:
-${prompt}
+        1. If the requested page needs interaction, implement it properly.
+        2. Buttons, forms, inputs, tabs, toggles, filters, counters, calculators, and modals should work correctly if they are part of the feature.
+        3. Forms should manage state correctly.
+        4. Validation should be basic but sensible where relevant.
+        5. Interactive features must feel functional, not fake.
+        6. If the request is mainly informational, still make the page visually rich and structured.
 
-Return ONLY valid React code.
-No explanations.
-No markdown.
-`
+        FALLBACK BEHAVIOR:
+
+        1. If the user prompt is too short or unclear, convert it into a complete webpage experience.
+        2. Infer missing details intelligently while staying close to the user intent.
+        3. Always generate something visually complete, responsive, and usable.
+        4. Never return a nearly empty page.
+
+        OUTPUT FORMAT (EXACTLY THIS SHAPE):
+
+        const GeneratedPage = () => {
+          // state and helper logic if needed
+
+          return (
+            <div>
+              <style>{\`
+                /* your css here */
+              \`}</style>
+              {/* full page ui */}
+            </div>
+          )
+        }
+
+        Feature to build:
+        ${prompt}
+
+        Generate a polished, responsive, functional webpage.
+        Return ONLY valid React code.
+        `
 
     const result = await model.generateContent(fullPrompt)
 

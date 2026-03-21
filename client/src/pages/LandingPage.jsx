@@ -1,22 +1,24 @@
 import { Link } from "react-router-dom"
 import { motion } from "framer-motion"
+import { useEffect } from "react"
 import {
-  FaMagic,
   FaRocket,
   FaCode,
-  FaCheckCircle,
   FaLayerGroup,
-  FaShieldAlt,
+  FaShield,
   FaArrowRight,
   FaLaptopCode,
   FaUserCheck,
   FaEye,
-  FaSyncAlt
-} from "react-icons/fa"
+  FaRotate,
+  FaStar,
+  FaRegLightbulb,
+  FaWandMagicSparkles
+} from "react-icons/fa6"
 
 const steps = [
   {
-    icon: <FaMagic />,
+    icon: <FaWandMagicSparkles />,
     title: "Submit Prompt",
     desc: "Describe the feature you want to build in simple language."
   },
@@ -54,12 +56,12 @@ const features = [
     desc: "Inspect generated pages before making them public."
   },
   {
-    icon: <FaSyncAlt />,
+    icon: <FaRotate />,
     title: "Edit & Re-Deploy",
     desc: "Refine code, save updates, and redeploy improved versions."
   },
   {
-    icon: <FaShieldAlt />,
+    icon: <FaShield />,
     title: "Admin Controlled Workflow",
     desc: "Keep deployment safe with approval and rollback support."
   }
@@ -74,181 +76,243 @@ const demoPages = [
   "Feature Preview Module"
 ]
 
+const stats = [
+  { value: "AI", label: "Prompt Driven" },
+  { value: "Live", label: "Preview Ready" },
+  { value: "Admin", label: "Controlled Flow" },
+  { value: "Safe", label: "Rollback Support" }
+]
+
 export default function LandingPage() {
+  useEffect(() => {
+    document.title = "AI Feature Builder"
+  }, [])
+
   return (
-    <div className="min-h-screen bg-[#07111f] text-white overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute top-0 left-0 h-[500px] w-[500px] bg-sky-500/10 blur-3xl rounded-full" />
-        <div className="absolute top-24 right-0 h-[450px] w-[450px] bg-fuchsia-500/10 blur-3xl rounded-full" />
-        <div className="absolute bottom-0 left-1/3 h-[420px] w-[420px] bg-emerald-500/10 blur-3xl rounded-full" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.08),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.10),transparent_35%)]" />
+    <div className="relative min-h-screen overflow-hidden bg-[#EEF2FB] text-[#1F2A44]">
+      {/* Background */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 left-[-80px] h-[300px] w-[300px] rounded-full bg-[#8A7CFF]/20 blur-3xl" />
+        <div className="absolute top-20 right-[-80px] h-[320px] w-[320px] rounded-full bg-[#F472B6]/15 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-[260px] w-[260px] rounded-full bg-[#6D5DF6]/10 blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(138,124,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(244,114,182,0.10),transparent_24%)]" />
       </div>
 
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-20">
-        <div className="grid lg:grid-cols-2 gap-14 items-center">
-          <motion.div
-            initial={{ opacity: 0, y: 25 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-          >
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-sky-400/20 bg-sky-400/10 text-sky-300 text-sm font-medium mb-6">
-              <FaMagic />
-              AI Powered Feature Workflow
-            </div>
+      <section className="relative mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14 lg:pb-24">
+        <div className="overflow-hidden rounded-[32px] border border-white/70 bg-white/80 shadow-[0_30px_80px_rgba(109,93,246,0.10)] backdrop-blur-xl">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.08fr_0.92fr] items-center gap-10 px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-10">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className=""
+            >
+              <div className="inline-flex items-center gap-2 rounded-full border border-[#D7DDF3] bg-[#F8FAFF] px-4 py-2 text-sm font-semibold text-[#6D5DF6] shadow-sm">
+                <FaWandMagicSparkles />
+                AI Powered Feature Workflow
+              </div>
 
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight leading-tight">
-              Build feature pages with
-              <span className="block bg-gradient-to-r from-sky-400 via-cyan-300 to-violet-400 bg-clip-text text-transparent">
-                AI, review, and deploy
-              </span>
-            </h1>
-
-            <p className="mt-6 text-lg text-slate-300 leading-8 max-w-2xl">
-              A modern workflow where feature requests move from prompt to AI generation,
-              admin review, live preview, editing, deployment, and rollback — all inside one platform.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-4">
-              <Link
-                to="/signup"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 text-slate-950 font-bold shadow-lg shadow-sky-500/20 transition"
-              >
-                Get Started
-                <FaArrowRight />
-              </Link>
-
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-semibold transition"
-              >
-                Login
-              </Link>
-            </div>
-
-            <div className="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[
-                ["Prompt Based", "Generation"],
-                ["Preview", "Before Deploy"],
-                ["Admin", "Approval Flow"],
-                ["Rollback", "Support"]
-              ].map(([top, bottom]) => (
-                <div
-                  key={top}
-                  className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 backdrop-blur-md"
-                >
-                  <div className="text-lg font-bold text-white">{top}</div>
-                  <div className="text-sm text-slate-400">{bottom}</div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.7, delay: 0.1 }}
-            className="relative"
-          >
-            <div className="rounded-[28px] border border-white/10 bg-[#0b1729]/80 backdrop-blur-xl shadow-2xl overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-4 border-b border-white/10 bg-[#0a1424]/80">
-                <span className="h-3 w-3 rounded-full bg-rose-400" />
-                <span className="h-3 w-3 rounded-full bg-amber-400" />
-                <span className="h-3 w-3 rounded-full bg-emerald-400" />
-                <span className="ml-3 text-sm text-slate-400">
-                  Workflow Overview
+              <h1 className="mt-6 max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+                Turn prompts into{" "}
+                <span className="bg-gradient-to-r from-[#6D5DF6] via-[#8A7CFF] to-[#F472B6] bg-clip-text text-transparent">
+                  polished feature pages
                 </span>
+              </h1>
+
+              <p className="mt-5 max-w-2xl text-base leading-7 text-[#64748B] sm:text-lg sm:leading-8">
+                A premium workflow where users submit ideas, AI generates React UI,
+                admins review and refine it, and approved pages go live through one
+                smooth platform.
+              </p>
+
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Link
+                  to="/signup"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] px-6 py-3.5 font-semibold text-white shadow-[0_14px_28px_rgba(109,93,246,0.28)] transition hover:translate-y-[-1px]"
+                >
+                  Get Started
+                  <FaArrowRight className="text-sm" />
+                </Link>
+
+                <Link
+                  to="/login"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D7DDF3] bg-white px-6 py-3.5 font-semibold text-[#1F2A44] shadow-sm transition hover:bg-[#F7F9FE]"
+                >
+                  Login
+                </Link>
               </div>
 
-              <div className="p-6 md:p-8">
-                <div className="grid gap-4">
-                  {steps.map((step, index) => (
-                    <motion.div
-                      key={step.title}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + index * 0.08 }}
-                      className="flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
-                    >
-                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-sky-500 to-violet-500 flex items-center justify-center text-white shadow-lg">
-                        {step.icon}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-white">{step.title}</h3>
-                        <p className="text-sm text-slate-400 mt-1 leading-6">
-                          {step.desc}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
+              <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {stats.map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-[#E6EBF7] bg-[#F9FBFF] px-4 py-4 shadow-sm"
+                  >
+                    <div className="text-lg font-bold text-[#1F2A44]">{item.value}</div>
+                    <div className="mt-1 text-sm text-[#64748B]">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.65, delay: 0.08 }}
+              className=""
+            >
+              <div className="relative rounded-[30px] border border-[#E2E8F4] bg-[#F5F7FD] p-4 shadow-[0_20px_50px_rgba(31,42,68,0.08)] sm:p-5">
+                <div className="rounded-[24px] border border-white bg-white p-4 shadow-sm sm:p-5">
+                  <div className="flex items-center justify-between gap-3 border-b border-[#EEF2F8] pb-4">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-full bg-[#FCA5A5]" />
+                      <span className="h-3 w-3 rounded-full bg-[#FCD34D]" />
+                      <span className="h-3 w-3 rounded-full bg-[#86EFAC]" />
+                    </div>
+                    <div className="rounded-full bg-[#F6F7FC] px-3 py-1 text-xs font-medium text-[#64748B]">
+                      AI Feature Pipeline
+                    </div>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    {steps.map((step, index) => (
+                      <motion.div
+                        key={step.title}
+                        initial={{ opacity: 0, x: 18 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.15 + index * 0.08 }}
+                        className="group flex items-start gap-4 rounded-2xl border border-[#EBF0F8] bg-[#FBFCFF] p-4 transition hover:border-[#D8DFF3] hover:bg-white"
+                      >
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#6D5DF6] to-[#8A7CFF] text-white shadow-md">
+                          {step.icon}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-semibold text-[#1F2A44]">
+                            {step.title}
+                          </h3>
+                          <p className="mt-1 text-sm leading-6 text-[#64748B]">
+                            {step.desc}
+                          </p>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] px-5 py-4 text-white shadow-md">
+                    <div className="flex items-center gap-2 text-sm font-semibold opacity-95">
+                      <FaStar />
+                      End-to-End Flow
+                    </div>
+                    <p className="mt-2 text-sm text-white/90">
+                      Request → Review → Preview → Deploy
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E6EBF7] bg-white px-5 py-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[#1F2A44]">
+                      <FaRegLightbulb className="text-[#F472B6]" />
+                      Production Mindset
+                    </div>
+                    <p className="mt-2 text-sm text-[#64748B]">
+                      Review, edit, and rollback support before pages go live.
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div className="absolute -bottom-6 -right-6 hidden md:block rounded-2xl border border-sky-400/20 bg-sky-400/10 px-5 py-4 backdrop-blur-xl shadow-xl">
-              <div className="text-sky-300 font-semibold">End-to-End Flow</div>
-              <div className="text-sm text-slate-300 mt-1">
-                Request → Review → Preview → Deploy
-              </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
-        <div className="text-center max-w-3xl mx-auto mb-14">
-          <p className="text-sky-300 font-semibold uppercase tracking-[0.2em] text-sm">
+      <section className="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#6D5DF6]">
             Platform Capabilities
           </p>
-          <h2 className="mt-4 text-3xl md:text-5xl font-extrabold">
-            Built for practical AI-assisted product development
+          <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
+            Built for real AI-assisted workflow, not just one-click generation
           </h2>
-          <p className="mt-5 text-slate-400 text-lg leading-8">
-            This platform is not just a generator. It includes governance, review,
-            iteration, deployment, and rollback — making it closer to a real product workflow.
+          <p className="mt-5 text-base leading-7 text-[#64748B] sm:text-lg sm:leading-8">
+            Your app already has the right core idea. This section presents it in a more
+            premium SaaS style while keeping all existing functionality untouched.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           {features.map((feature, idx) => (
             <motion.div
               key={feature.title}
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 22 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.45, delay: idx * 0.08 }}
-              className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-xl hover:-translate-y-1 transition"
+              className="rounded-[28px] border border-white/80 bg-white/85 p-6 shadow-[0_18px_40px_rgba(31,42,68,0.06)] backdrop-blur-sm transition hover:-translate-y-1"
             >
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-sky-500 to-violet-500 flex items-center justify-center text-white text-xl shadow-lg">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#6D5DF6] to-[#8A7CFF] text-xl text-white shadow-md">
                 {feature.icon}
               </div>
-              <h3 className="mt-5 text-xl font-semibold">{feature.title}</h3>
-              <p className="mt-3 text-slate-400 leading-7">{feature.desc}</p>
+
+              <h3 className="mt-5 text-xl font-semibold text-[#1F2A44]">
+                {feature.title}
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-[#64748B] sm:text-base">
+                {feature.desc}
+              </p>
             </motion.div>
           ))}
         </div>
       </section>
 
       {/* Showcase */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-16">
-        <div className="rounded-[32px] border border-white/10 bg-gradient-to-br from-sky-500/10 via-[#091423] to-violet-500/10 p-8 md:p-12 overflow-hidden relative">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.12),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(168,85,247,0.12),transparent_35%)]" />
+      <section className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+        <div className="overflow-hidden rounded-[32px] border border-white/80 bg-gradient-to-br from-[#EDEBFF] via-[#F9FAFF] to-[#FDF4FB] p-6 shadow-[0_24px_60px_rgba(109,93,246,0.10)] sm:p-8 lg:p-10">
+          <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#6D5DF6]">
+                Example Outputs
+              </p>
+              <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
+                Example pages this workflow can produce
+              </h2>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-[#64748B] sm:text-lg sm:leading-8">
+                Presenting generated pages as clean premium cards makes the landing page
+                feel much closer to a modern product showcase.
+              </p>
 
-          <div className="relative z-10">
-            <p className="text-sky-300 font-semibold uppercase tracking-[0.2em] text-sm">
-              Example Outputs
-            </p>
-            <h2 className="mt-4 text-3xl md:text-5xl font-extrabold">
-              Example pages this workflow can produce
-            </h2>
-            <p className="mt-5 text-slate-300 text-lg leading-8 max-w-3xl">
-              The system can create interactive feature blocks, small product experiences,
-              and reusable pages that go through review before becoming public.
-            </p>
+              <div className="mt-8 rounded-[28px] border border-white/70 bg-white/80 p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#6D5DF6]">Workflow Snapshot</p>
+                    <h3 className="mt-1 text-xl font-bold text-[#1F2A44]">
+                      Prompt to Live Page
+                    </h3>
+                  </div>
+                  <div className="rounded-full bg-[#EEF2FB] px-3 py-1 text-xs font-medium text-[#64748B]">
+                    Responsive UI
+                  </div>
+                </div>
 
-            <div className="mt-10 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div className="mt-5 space-y-3">
+                  {["Submit", "Generate", "Review", "Preview", "Deploy"].map((item, i) => (
+                    <div
+                      key={item}
+                      className="flex items-center gap-3 rounded-2xl bg-[#F8FAFF] px-4 py-3"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#6D5DF6] text-sm font-bold text-white">
+                        {i + 1}
+                      </div>
+                      <span className="font-medium text-[#1F2A44]">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
               {demoPages.map((page, idx) => (
                 <motion.div
                   key={page}
@@ -256,12 +320,27 @@ export default function LandingPage() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: idx * 0.06 }}
-                  className="rounded-2xl border border-white/10 bg-[#07111f]/80 backdrop-blur-md p-5 hover:border-sky-400/30 transition"
+                  className="rounded-[28px] border border-white/80 bg-white/85 p-5 shadow-[0_18px_38px_rgba(31,42,68,0.06)]"
                 >
-                  <div className="text-sky-300 text-sm font-semibold mb-2">
-                    Generated Output
+                  <div className="rounded-2xl bg-gradient-to-br from-[#6D5DF6] to-[#8A7CFF] p-[1px]">
+                    <div className="rounded-2xl bg-[#F7F8FE] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#6D5DF6] shadow-sm">
+                          Generated Output
+                        </span>
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#86EFAC]" />
+                      </div>
+
+                      <div className="mt-5 h-28 rounded-2xl bg-gradient-to-br from-[#E9ECF8] via-[#F5F7FB] to-[#FDF4FB]" />
+
+                      <div className="mt-4 text-lg font-semibold text-[#1F2A44]">
+                        {page}
+                      </div>
+                      <p className="mt-1 text-sm text-[#64748B]">
+                        Preview-ready AI generated feature block.
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-white font-semibold text-lg">{page}</div>
                 </motion.div>
               ))}
             </div>
@@ -270,34 +349,80 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-20">
-        <div className="rounded-[32px] border border-white/10 bg-white/[0.04] backdrop-blur-xl p-8 md:p-14 text-center shadow-2xl">
-          <h2 className="text-3xl md:text-5xl font-extrabold">
+      <section className="relative mx-auto max-w-7xl px-4 pb-2 pt-2 sm:px-6 lg:px-8 lg:pb-4">
+        <div className="rounded-[32px] border border-white/80 bg-white/85 p-6 text-center shadow-[0_24px_60px_rgba(31,42,68,0.08)] backdrop-blur-sm sm:p-8 lg:p-12">
+          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
             Explore the full workflow
           </h2>
-          <p className="mt-5 text-slate-400 text-lg max-w-2xl mx-auto leading-8">
-            Create a request, review generated output, and see how the system moves
-            features from idea to live experience.
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[#64748B] sm:text-lg sm:leading-8">
+            Create a request, review generated output, and move features from idea
+            to live experience with a premium admin-driven process.
           </p>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link
               to="/signup"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-sky-400 to-cyan-400 hover:from-sky-300 hover:to-cyan-300 text-slate-950 font-bold transition shadow-lg shadow-sky-500/20"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] px-6 py-3.5 font-semibold text-white shadow-[0_14px_28px_rgba(109,93,246,0.28)] transition hover:translate-y-[-1px]"
             >
               Create Account
-              <FaArrowRight />
+              <FaArrowRight className="text-sm" />
             </Link>
 
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-semibold transition"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#D7DDF3] bg-[#F8FAFF] px-6 py-3.5 font-semibold text-[#1F2A44] transition hover:bg-white"
             >
               Login
             </Link>
           </div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="relative mx-auto max-w-7xl px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+        <div className="rounded-[28px] border border-white/80 bg-white/80 backdrop-blur-sm shadow-[0_20px_50px_rgba(31,42,68,0.06)] px-6 py-6 sm:px-8 sm:py-8">
+          
+          {/* Top Row */}
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            
+            {/* Left */}
+            <div>
+              <h3 className="text-lg font-bold text-[#1F2A44]">
+                AI Feature Builder
+              </h3>
+              <p className="mt-1 text-sm text-[#64748B]">
+                Build, review, and deploy AI-generated features with a modern workflow.
+              </p>
+            </div>
+
+            {/* Right */}
+            <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-[#64748B]">
+              <a href="#" className="hover:text-[#6D5DF6] transition">Home</a>
+              <a href="#" className="hover:text-[#6D5DF6] transition">Features</a>
+              <a href="#" className="hover:text-[#6D5DF6] transition">Explore</a>
+              <a href="#" className="hover:text-[#6D5DF6] transition">Contact</a>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 h-[1px] w-full bg-gradient-to-r from-transparent via-[#E2E8F4] to-transparent" />
+
+          {/* Bottom Row */}
+          <div className="flex flex-col gap-3 text-center md:flex-row md:items-center md:justify-between md:text-left">
+            
+            <p className="text-sm text-[#64748B]">
+              © {new Date().getFullYear()} AI Feature Builder. All rights reserved.
+            </p>
+
+            <p className="text-sm font-medium text-[#1F2A44]">
+              Made with ❤️ by{" "}
+              <span className="bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] bg-clip-text text-transparent font-semibold">
+                Harshit Roy
+              </span>
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
