@@ -5,8 +5,8 @@ A full-stack AI-powered platform that converts natural language prompts into **i
 ---
 
 ## 🌐 Live Demo
-- 🔗 Frontend: *(Add your Vercel link here)*
-- 🔗 Backend API: *(Add your Render link here)*
+- 🔗 Frontend: https://ai-feature-builder-v83z.vercel.app/
+- 🔗 Backend API: https://ai-feature-builder-api.onrender.com/
 
 ---
 
