@@ -2,6 +2,9 @@ const { GoogleGenerativeAI } = require("@google/generative-ai")
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
+/* -----------------------------
+   CLEAN AI OUTPUT
+----------------------------- */
 function sanitizeGeneratedCode(text) {
   let cleaned = text || ""
 
@@ -12,48 +15,178 @@ function sanitizeGeneratedCode(text) {
   cleaned = cleaned.replace(/function\s+App\s*\([\s\S]*?\}\s*/g, "")
   cleaned = cleaned.replace(/const\s+App\s*=\s*\([\s\S]*?\}\s*;?/g, "")
 
-  const componentStart = cleaned.indexOf("const GeneratedPage")
-  if (componentStart !== -1) {
-    cleaned = cleaned.slice(componentStart)
+  const generatedConstStart = cleaned.indexOf("const GeneratedPage")
+  const generatedFnStart = cleaned.indexOf("function GeneratedPage")
+
+  if (generatedConstStart !== -1) {
+    cleaned = cleaned.slice(generatedConstStart)
+  } else if (generatedFnStart !== -1) {
+    cleaned = cleaned.slice(generatedFnStart)
   }
 
   return cleaned.trim()
 }
 
+/* -----------------------------
+   VALIDATION
+----------------------------- */
+function isValidGeneratedCode(code) {
+  return (
+    !!code &&
+    typeof code === "string" &&
+    code.includes("GeneratedPage") &&
+    code.includes("return") &&
+    !code.includes("export default function App")
+  )
+}
+
+/* -----------------------------
+   PROMPT TYPE CHECKS
+----------------------------- */
+function normalizePrompt(prompt) {
+  return String(prompt || "").trim()
+}
+
+function lowerPrompt(prompt) {
+  return normalizePrompt(prompt).toLowerCase()
+}
+
 function isTodoLikePrompt(prompt) {
-  const value = String(prompt || "").toLowerCase()
+  const value = lowerPrompt(prompt)
   return (
     value.includes("todo") ||
     value.includes("to-do") ||
     value.includes("task manager") ||
     value.includes("task app") ||
-    value.includes("kanban")
+    value.includes("kanban") ||
+    value.includes("checklist")
   )
 }
 
+function isNotesLikePrompt(prompt) {
+  const value = lowerPrompt(prompt)
+  return (
+    value.includes("notes") ||
+    value.includes("note taking") ||
+    value.includes("journal") ||
+    value.includes("memo")
+  )
+}
+
+function isTrackerLikePrompt(prompt) {
+  const value = lowerPrompt(prompt)
+  return (
+    value.includes("tracker") ||
+    value.includes("habit") ||
+    value.includes("expense") ||
+    value.includes("budget") ||
+    value.includes("planner")
+  )
+}
+
+function isGameLikePrompt(prompt) {
+  const value = lowerPrompt(prompt)
+  return (
+    value.includes("game") ||
+    value.includes("chess") ||
+    value.includes("sudoku") ||
+    value.includes("tic tac toe") ||
+    value.includes("tic-tac-toe") ||
+    value.includes("puzzle") ||
+    value.includes("board game") ||
+    value.includes("quiz") ||
+    value.includes("memory game") ||
+    value.includes("snake") ||
+    value.includes("2048") ||
+    value.includes("minesweeper")
+  )
+}
+
+function isToolLikePrompt(prompt) {
+  const value = lowerPrompt(prompt)
+  return (
+    value.includes("calculator") ||
+    value.includes("converter") ||
+    value.includes("dashboard") ||
+    value.includes("form") ||
+    value.includes("editor") ||
+    value.includes("builder") ||
+    value.includes("planner") ||
+    value.includes("tracker") ||
+    value.includes("generator") ||
+    value.includes("management") ||
+    value.includes("admin")
+  )
+}
+
+function classifyPrompt(prompt) {
+  if (isTodoLikePrompt(prompt)) return "todo"
+  if (isNotesLikePrompt(prompt)) return "notes"
+  if (isTrackerLikePrompt(prompt)) return "tracker"
+  if (isGameLikePrompt(prompt)) return "game"
+  if (isToolLikePrompt(prompt)) return "tool"
+  return "page"
+}
+
+/* -----------------------------
+   HELPERS
+----------------------------- */
+function escapeForTemplateLiteral(value) {
+  return String(value || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${")
+}
+
+function buildStorageBridgeHelpers(storageKey, defaultDataExpression) {
+  return `
+  const STORAGE_KEY = "${storageKey}"
+
+  const readStoredData = () => {
+    try {
+      if (window.afbStorage && typeof window.afbStorage.getItem === "function") {
+        const saved = window.afbStorage.getItem(STORAGE_KEY)
+        return saved ? JSON.parse(saved) : ${defaultDataExpression}
+      }
+
+      const saved = localStorage.getItem(STORAGE_KEY)
+      return saved ? JSON.parse(saved) : ${defaultDataExpression}
+    } catch {
+      return ${defaultDataExpression}
+    }
+  }
+
+  const writeStoredData = (value) => {
+    try {
+      const serialized = JSON.stringify(value)
+
+      if (window.afbStorage && typeof window.afbStorage.setItem === "function") {
+        window.afbStorage.setItem(STORAGE_KEY, serialized)
+        return
+      }
+
+      localStorage.setItem(STORAGE_KEY, serialized)
+    } catch {}
+  }
+`
+}
+
+/* -----------------------------
+   TODO TEMPLATE
+----------------------------- */
 function buildTodoTemplate(prompt) {
   const title = /kanban/i.test(prompt) ? "Kanban Todo Board" : "Todo App"
 
   return `
 const GeneratedPage = () => {
-  const STORAGE_KEY = "afb_page_todo_app"
+${buildStorageBridgeHelpers("afb_page_todo_app", "[]")}
 
-  const [todos, setTodos] = React.useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      return saved ? JSON.parse(saved) : []
-    } catch {
-      return []
-    }
-  })
-
+  const [todos, setTodos] = React.useState(() => readStoredData())
   const [newTodoText, setNewTodoText] = React.useState("")
   const [draggedItemId, setDraggedItemId] = React.useState(null)
 
   React.useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(todos))
-    } catch {}
+    writeStoredData(todos)
   }, [todos])
 
   const handleAddTodo = (e) => {
@@ -107,355 +240,209 @@ const GeneratedPage = () => {
     todos.filter((todo) => todo.status === status)
 
   const columnStatuses = [
-    { key: "todo", title: "To Do", color: "#6d5df6" },
-    { key: "in-progress", title: "In Progress", color: "#06b6d4" },
-    { key: "done", title: "Done", color: "#22c55e" }
+    { key: "todo", title: "To Do" },
+    { key: "in-progress", title: "In Progress" },
+    { key: "done", title: "Done" }
   ]
 
   return (
     <div className="generated-page-container">
       <style>{\`
-        :root {
-          --color-primary: #6d5df6;
-          --color-primary-light: #8a7cff;
-          --color-secondary: #06b6d4;
-          --color-success: #22c55e;
-          --color-background-light: #f4f7fb;
-          --color-background-dark: #e8edf5;
-          --color-text-dark: #1f2a44;
-          --color-text-light: #64748b;
-          --color-white: #ffffff;
-          --color-border-light: #dbe3f0;
-          --color-shadow-light: rgba(31, 42, 68, 0.08);
-          --color-shadow-medium: rgba(31, 42, 68, 0.14);
-          --color-danger: #ef4444;
-
-          --radius-small: 8px;
-          --radius-medium: 18px;
-          --spacing-xs: 8px;
-          --spacing-sm: 12px;
-          --spacing-md: 20px;
-          --spacing-lg: 32px;
-          --spacing-xl: 48px;
-
-          --font-family-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-
-        * {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-        }
-
+        * { box-sizing: border-box; }
         body {
-          font-family: var(--font-family-sans);
-          line-height: 1.6;
-          color: var(--color-text-dark);
+          margin: 0;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           background: linear-gradient(180deg, #eef2fb 0%, #f8faff 100%);
-          -webkit-font-smoothing: antialiased;
-          -moz-osx-font-smoothing: grayscale;
+          color: #1f2a44;
         }
-
         .generated-page-container {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
-          align-items: center;
         }
-
         .header {
-          width: 100%;
-          background-color: rgba(255,255,255,0.85);
-          backdrop-filter: blur(10px);
-          padding: var(--spacing-md) var(--spacing-lg);
-          box-shadow: 0 2px 10px var(--color-shadow-light);
-          text-align: center;
+          padding: 24px 20px;
+          background: rgba(255,255,255,0.85);
           border-bottom: 1px solid #e6ebf5;
+          text-align: center;
+          backdrop-filter: blur(10px);
         }
-
         .header h1 {
-          font-size: 2.1em;
-          color: var(--color-primary);
+          margin: 0;
+          font-size: 2rem;
           font-weight: 800;
+          color: #6d5df6;
         }
-
         .header p {
-          margin-top: 6px;
-          color: var(--color-text-light);
-          font-size: 0.98em;
+          margin: 8px 0 0;
+          color: #64748b;
         }
-
         .main-content {
-          flex-grow: 1;
+          flex: 1;
           width: 100%;
-          max-width: 1400px;
-          padding: var(--spacing-lg);
-          display: flex;
-          flex-direction: column;
-          gap: var(--spacing-lg);
+          max-width: 1380px;
+          margin: 0 auto;
+          padding: 28px 20px;
+          display: grid;
+          gap: 24px;
         }
-
-        @media (min-width: 768px) {
+        @media (min-width: 900px) {
           .main-content {
-            display: grid;
             grid-template-columns: 320px 1fr;
-            gap: var(--spacing-xl);
           }
         }
-
-        .add-todo-section {
-          background-color: var(--color-white);
-          padding: var(--spacing-md);
-          border-radius: 24px;
-          box-shadow: 0 16px 40px var(--color-shadow-light);
+        .panel, .column {
+          background: #ffffff;
           border: 1px solid #e6ebf5;
-          width: 100%;
+          border-radius: 24px;
+          box-shadow: 0 18px 40px rgba(31,42,68,0.07);
         }
-
-        @media (min-width: 768px) {
-          .add-todo-section {
-            grid-column: 1 / 2;
-            align-self: flex-start;
+        .panel {
+          padding: 20px;
+          align-self: start;
+        }
+        @media (min-width: 900px) {
+          .panel {
             position: sticky;
             top: 24px;
           }
         }
-
-        .add-todo-form {
+        .panel h2 {
+          margin: 0 0 8px;
+          font-size: 1.1rem;
+        }
+        .helper {
+          margin: 0 0 16px;
+          color: #64748b;
+          font-size: 0.95rem;
+          line-height: 1.7;
+        }
+        .panel form {
           display: flex;
           flex-direction: column;
-          gap: var(--spacing-sm);
+          gap: 12px;
         }
-
-        .add-todo-form label {
-          font-weight: 700;
-          color: var(--color-text-dark);
-          font-size: 1.05em;
-          margin-bottom: 2px;
-          display: block;
-        }
-
-        .helper-text {
-          color: var(--color-text-light);
-          font-size: 0.92em;
-          margin-bottom: 10px;
-        }
-
-        .add-todo-form input[type="text"] {
+        .panel input {
           width: 100%;
           padding: 14px 16px;
-          border: 1px solid var(--color-border-light);
           border-radius: 14px;
-          font-size: 1em;
-          transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-          color: var(--color-text-dark);
+          border: 1px solid #dbe3f0;
           outline: none;
+          font-size: 1rem;
         }
-
-        .add-todo-form input[type="text"]:focus {
-          border-color: var(--color-primary);
-          box-shadow: 0 0 0 3px rgba(109, 93, 246, 0.14);
+        .panel input:focus {
+          border-color: #6d5df6;
+          box-shadow: 0 0 0 3px rgba(109,93,246,0.12);
         }
-
-        .add-todo-form button {
-          background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
-          color: var(--color-white);
+        .panel button {
           border: none;
-          padding: 14px 16px;
           border-radius: 14px;
-          font-size: 1em;
+          padding: 14px 16px;
+          background: linear-gradient(90deg, #6d5df6 0%, #8a7cff 100%);
+          color: white;
           font-weight: 700;
           cursor: pointer;
-          transition: opacity 0.2s ease-in-out, transform 0.1s ease-in-out;
-          margin-top: 4px;
-          box-shadow: 0 14px 28px rgba(109, 93, 246, 0.18);
+          box-shadow: 0 14px 28px rgba(109,93,246,0.18);
         }
-
-        .add-todo-form button:hover {
-          opacity: 0.95;
-          transform: translateY(-1px);
+        .board {
+          display: grid;
+          gap: 18px;
         }
-
-        .todo-columns-wrapper {
-          display: flex;
-          flex-direction: column;
-          gap: var(--spacing-md);
-          width: 100%;
-        }
-
-        @media (min-width: 768px) {
-          .todo-columns-wrapper {
-            grid-column: 2 / 3;
-            flex-direction: row;
-            align-items: flex-start;
-            flex-wrap: wrap;
+        @media (min-width: 900px) {
+          .board {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
           }
         }
-
-        @media (min-width: 1024px) {
-          .todo-columns-wrapper {
-            flex-wrap: nowrap;
-          }
+        .column {
+          padding: 18px;
+          background: #f9fbff;
         }
-
-        .todo-column {
-          background-color: var(--color-background-dark);
-          border-radius: 24px;
-          padding: var(--spacing-md);
-          box-shadow: 0 14px 34px rgba(31,42,68,0.06);
-          min-height: 220px;
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          border: 1px solid #e6ebf5;
-          transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-          min-width: 280px;
-        }
-
-        .todo-column.drag-over {
-          border-color: var(--color-primary);
-          background-color: #f8faff;
-          box-shadow: 0 0 0 4px rgba(109, 93, 246, 0.14), 0 10px 30px rgba(31,42,68,0.10);
-        }
-
         .column-header {
           display: flex;
           align-items: center;
-          margin-bottom: var(--spacing-md);
-          padding-bottom: var(--spacing-xs);
-          border-bottom: 1px solid #dbe3f0;
+          justify-content: space-between;
+          margin-bottom: 14px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid #e2e8f0;
         }
-
-        .column-header h2 {
-          font-size: 1.25em;
+        .column-header h3 {
+          margin: 0;
+          font-size: 1.05rem;
           font-weight: 800;
-          margin-right: var(--spacing-sm);
         }
-
-        .column-header h2.todo-color { color: var(--color-primary); }
-        .column-header h2.in-progress-color { color: var(--color-secondary); }
-        .column-header h2.done-color { color: var(--color-success); }
-
-        .todo-count {
-          color: var(--color-white);
-          font-size: 0.9em;
-          font-weight: 700;
-          padding: 4px 10px;
-          border-radius: 999px;
+        .count {
           min-width: 32px;
           text-align: center;
+          border-radius: 999px;
+          padding: 4px 10px;
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: white;
+          background: #6d5df6;
         }
-
-        .todo-column[data-status="todo"] .todo-count { background-color: var(--color-primary); }
-        .todo-column[data-status="in-progress"] .todo-count { background-color: var(--color-secondary); }
-        .todo-column[data-status="done"] .todo-count { background-color: var(--color-success); }
-
-        .todo-list {
+        .list {
           display: flex;
           flex-direction: column;
-          gap: var(--spacing-sm);
-          flex-grow: 1;
+          gap: 12px;
+          min-height: 120px;
         }
-
-        .empty-column-message {
-          color: var(--color-text-light);
-          font-size: 0.92em;
+        .empty {
           text-align: center;
-          padding: var(--spacing-md) 0;
-          background-color: rgba(255,255,255,0.65);
-          border-radius: 14px;
+          color: #64748b;
+          padding: 16px;
           border: 1px dashed #d7deee;
-          margin: var(--spacing-sm) 0;
+          border-radius: 14px;
+          background: rgba(255,255,255,0.7);
+          font-size: 0.92rem;
         }
-
         .todo-item {
-          background-color: var(--color-white);
-          padding: 14px 16px;
-          border-radius: 16px;
-          box-shadow: 0 4px 12px rgba(31,42,68,0.06);
-          cursor: grab;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out, opacity 0.1s ease-in-out;
+          gap: 12px;
+          padding: 14px 16px;
+          border-radius: 16px;
           border: 1px solid #e6ebf5;
+          background: #ffffff;
+          box-shadow: 0 8px 20px rgba(31,42,68,0.06);
+          cursor: grab;
         }
-
-        .todo-item:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 24px rgba(31,42,68,0.10);
-        }
-
-        .todo-item.dragging {
-          opacity: 0.65;
-          box-shadow: 0 12px 28px rgba(31,42,68,0.14);
-          transform: scale(1.02);
-        }
-
         .todo-item-text {
-          flex-grow: 1;
-          font-size: 0.98em;
-          color: var(--color-text-dark);
+          flex: 1;
           word-break: break-word;
-          padding-right: var(--spacing-xs);
         }
-
         .delete-button {
-          background: none;
           border: none;
-          color: var(--color-danger);
-          font-size: 1.1em;
+          background: transparent;
+          color: #ef4444;
           cursor: pointer;
-          margin-left: var(--spacing-sm);
-          opacity: 0.75;
-          transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-          padding: 0 4px;
+          font-size: 1.05rem;
+          font-weight: 700;
         }
-
-        .delete-button:hover {
-          opacity: 1;
-          transform: scale(1.08);
-        }
-
         .footer {
-          width: 100%;
-          padding: var(--spacing-md);
-          background-color: #1f2a44;
-          color: var(--color-white);
+          padding: 18px;
           text-align: center;
-          margin-top: var(--spacing-xl);
-          font-size: 0.9em;
-        }
-
-        .footer p {
-          margin: 0;
-        }
-
-        @media (max-width: 767px) {
-          .main-content {
-            padding: 18px;
-          }
-
-          .header h1 {
-            font-size: 1.8em;
-          }
+          background: #1f2a44;
+          color: white;
+          font-size: 0.92rem;
+          margin-top: 24px;
         }
       \`}</style>
 
       <header className="header">
-        <h1>${title}</h1>
+        <h1>${escapeForTemplateLiteral(title)}</h1>
         <p>Add, move, and remove tasks. Your tasks stay saved after refresh and reopen.</p>
       </header>
 
       <div className="main-content">
-        <div className="add-todo-section">
-          <form onSubmit={handleAddTodo} className="add-todo-form">
-            <label htmlFor="new-todo-input">Add New Task</label>
-            <p className="helper-text">
-              Use this board to manage your tasks across To Do, In Progress, and Done.
-            </p>
+        <div className="panel">
+          <h2>Add New Task</h2>
+          <p className="helper">
+            Create and manage tasks across To Do, In Progress, and Done.
+          </p>
+
+          <form onSubmit={handleAddTodo}>
             <input
-              id="new-todo-input"
               type="text"
               value={newTodoText}
               onChange={(e) => setNewTodoText(e.target.value)}
@@ -466,40 +453,31 @@ const GeneratedPage = () => {
           </form>
         </div>
 
-        <div className="todo-columns-wrapper">
+        <div className="board">
           {columnStatuses.map((column) => (
             <div
               key={column.key}
-              className="todo-column"
-              data-status={column.key}
+              className="column"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, column.key)}
-              onDragEnter={(e) => e.currentTarget.classList.add("drag-over")}
-              onDragLeave={(e) => e.currentTarget.classList.remove("drag-over")}
             >
               <div className="column-header">
-                <h2 className={\`\${column.key}-color\`}>{column.title}</h2>
-                <span className="todo-count">
-                  {getTodosByStatus(column.key).length}
-                </span>
+                <h3>{column.title}</h3>
+                <span className="count">{getTodosByStatus(column.key).length}</span>
               </div>
 
-              <div className="todo-list">
+              <div className="list">
                 {getTodosByStatus(column.key).length === 0 && (
-                  <p className="empty-column-message">
-                    No tasks here yet.
-                  </p>
+                  <div className="empty">No tasks here yet.</div>
                 )}
 
                 {getTodosByStatus(column.key).map((todo) => (
                   <div
                     key={todo.id}
-                    className={\`todo-item \${todo.id === draggedItemId ? "dragging" : ""}\`}
+                    className="todo-item"
                     draggable="true"
                     onDragStart={(e) => handleDragStart(e, todo.id)}
                     onDragEnd={handleDragEnd}
-                    aria-grabbed={todo.id === draggedItemId ? "true" : "false"}
-                    tabIndex="0"
                   >
                     <span className="todo-item-text">{todo.text}</span>
                     <button
@@ -507,9 +485,8 @@ const GeneratedPage = () => {
                       type="button"
                       onClick={() => handleDeleteTodo(todo.id)}
                       aria-label={\`Delete task: \${todo.text}\`}
-                      title={\`Delete task: \${todo.text}\`}
                     >
-                      &#x2715;
+                      ×
                     </button>
                   </div>
                 ))}
@@ -520,7 +497,7 @@ const GeneratedPage = () => {
       </div>
 
       <footer className="footer">
-        <p>&copy; {new Date().getFullYear()} ${title}. All rights reserved.</p>
+        <p>Saved automatically for your next session.</p>
       </footer>
     </div>
   )
@@ -528,123 +505,958 @@ const GeneratedPage = () => {
   `.trim()
 }
 
-async function generateReactPage(prompt) {
-  try {
-    const safePrompt = String(prompt || "").trim()
+/* -----------------------------
+   NOTES TEMPLATE
+----------------------------- */
+function buildNotesTemplate() {
+  return `
+const GeneratedPage = () => {
+${buildStorageBridgeHelpers("afb_page_notes_workspace", "{ notes: [] }")}
 
-    if (isTodoLikePrompt(safePrompt)) {
-      return buildTodoTemplate(safePrompt)
+  const [state, setState] = React.useState(() => readStoredData())
+  const [title, setTitle] = React.useState("")
+  const [content, setContent] = React.useState("")
+
+  const notes = Array.isArray(state?.notes) ? state.notes : []
+
+  React.useEffect(() => {
+    writeStoredData({ notes })
+  }, [notes])
+
+  const addNote = (e) => {
+    e.preventDefault()
+    if (!title.trim() && !content.trim()) return
+
+    const newNote = {
+      id: String(Date.now()),
+      title: title.trim() || "Untitled note",
+      content: content.trim(),
+      createdAt: new Date().toLocaleString()
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash"
+    setState({ notes: [newNote, ...notes] })
+    setTitle("")
+    setContent("")
+  }
+
+  const deleteNote = (id) => {
+    setState({ notes: notes.filter((note) => note.id !== id) })
+  }
+
+  return (
+    <div className="notes-page">
+      <style>{\`
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+          background: linear-gradient(180deg, #eef2fb 0%, #f8faff 100%);
+          color: #1f2a44;
+        }
+        .notes-page { min-height: 100vh; }
+        .hero {
+          padding: 28px 20px;
+          text-align: center;
+          background: rgba(255,255,255,0.82);
+          border-bottom: 1px solid #e6ebf5;
+          backdrop-filter: blur(10px);
+        }
+        .hero h1 {
+          margin: 0;
+          font-size: 2rem;
+          font-weight: 800;
+          color: #6d5df6;
+        }
+        .hero p {
+          margin: 8px auto 0;
+          max-width: 720px;
+          color: #64748b;
+          line-height: 1.7;
+        }
+        .wrap {
+          max-width: 1280px;
+          margin: 0 auto;
+          padding: 28px 20px;
+          display: grid;
+          gap: 24px;
+        }
+        @media (min-width: 900px) {
+          .wrap {
+            grid-template-columns: 360px 1fr;
+          }
+        }
+        .composer, .notes-grid {
+          background: #ffffff;
+          border: 1px solid #e6ebf5;
+          border-radius: 24px;
+          box-shadow: 0 18px 40px rgba(31,42,68,0.07);
+        }
+        .composer {
+          padding: 20px;
+          align-self: start;
+        }
+        .composer h2 {
+          margin: 0 0 10px;
+          font-size: 1.1rem;
+        }
+        .composer p {
+          margin: 0 0 16px;
+          color: #64748b;
+          line-height: 1.7;
+          font-size: 0.95rem;
+        }
+        .composer form {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .composer input,
+        .composer textarea {
+          width: 100%;
+          border: 1px solid #dbe3f0;
+          border-radius: 14px;
+          padding: 14px 16px;
+          font-size: 1rem;
+          outline: none;
+        }
+        .composer textarea {
+          min-height: 180px;
+          resize: vertical;
+        }
+        .composer input:focus,
+        .composer textarea:focus {
+          border-color: #6d5df6;
+          box-shadow: 0 0 0 3px rgba(109,93,246,0.12);
+        }
+        .composer button {
+          border: none;
+          border-radius: 14px;
+          padding: 14px 16px;
+          background: linear-gradient(90deg, #6d5df6 0%, #8a7cff 100%);
+          color: white;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .notes-grid {
+          padding: 20px;
+          background: #f9fbff;
+        }
+        .notes-grid h2 {
+          margin: 0 0 16px;
+          font-size: 1.2rem;
+        }
+        .grid {
+          display: grid;
+          gap: 16px;
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        }
+        .note-card {
+          background: white;
+          border: 1px solid #e6ebf5;
+          border-radius: 18px;
+          padding: 16px;
+          box-shadow: 0 10px 24px rgba(31,42,68,0.06);
+        }
+        .note-card h3 {
+          margin: 0 0 8px;
+          font-size: 1rem;
+        }
+        .meta {
+          color: #94a3b8;
+          font-size: 0.8rem;
+          margin-bottom: 10px;
+        }
+        .body {
+          color: #475569;
+          line-height: 1.7;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .empty {
+          text-align: center;
+          padding: 24px;
+          color: #64748b;
+          border: 1px dashed #d7deee;
+          border-radius: 16px;
+          background: rgba(255,255,255,0.7);
+        }
+        .row {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 14px;
+        }
+        .delete-btn {
+          border: none;
+          background: #fee2e2;
+          color: #b91c1c;
+          border-radius: 12px;
+          padding: 10px 12px;
+          cursor: pointer;
+          font-weight: 700;
+        }
+      \`}</style>
+
+      <div className="hero">
+        <h1>Notes Workspace</h1>
+        <p>Capture ideas, keep drafts, and return to your notes anytime with saved progress.</p>
+      </div>
+
+      <div className="wrap">
+        <div className="composer">
+          <h2>Create a note</h2>
+          <p>Write a title and note content below. Your notes are saved automatically.</p>
+
+          <form onSubmit={addNote}>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Note title"
+            />
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write your note here..."
+            />
+            <button type="submit">Save Note</button>
+          </form>
+        </div>
+
+        <div className="notes-grid">
+          <h2>Your notes</h2>
+
+          {notes.length === 0 ? (
+            <div className="empty">No notes yet. Create your first note from the panel.</div>
+          ) : (
+            <div className="grid">
+              {notes.map((note) => (
+                <div className="note-card" key={note.id}>
+                  <h3>{note.title}</h3>
+                  <div className="meta">{note.createdAt}</div>
+                  <div className="body">{note.content || "No content"}</div>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="delete-btn"
+                      onClick={() => deleteNote(note.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+  `.trim()
+}
+
+/* -----------------------------
+   TRACKER TEMPLATE
+----------------------------- */
+function buildTrackerTemplate() {
+  return `
+const GeneratedPage = () => {
+${buildStorageBridgeHelpers("afb_page_tracker", "{ items: [] }")}
+
+  const [state, setState] = React.useState(() => readStoredData())
+  const [label, setLabel] = React.useState("")
+
+  const items = Array.isArray(state?.items) ? state.items : []
+
+  React.useEffect(() => {
+    writeStoredData({ items })
+  }, [items])
+
+  const addItem = (e) => {
+    e.preventDefault()
+    if (!label.trim()) return
+
+    const newItem = {
+      id: String(Date.now()),
+      label: label.trim(),
+      done: false
+    }
+
+    setState({ items: [...items, newItem] })
+    setLabel("")
+  }
+
+  const toggleItem = (id) => {
+    setState({
+      items: items.map((item) =>
+        item.id === id ? { ...item, done: !item.done } : item
+      )
     })
+  }
 
-    const fullPrompt = `
-You are a senior frontend engineer, product designer, and UI/UX specialist.
+  const clearCompleted = () => {
+    setState({ items: items.filter((item) => !item.done) })
+  }
 
-Your task is to generate a complete, polished, responsive React webpage or mini-application as a single functional component.
+  const completedCount = items.filter((item) => item.done).length
 
+  return (
+    <div className="tracker-page">
+      <style>{\`
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+          background: linear-gradient(180deg, #eef2fb 0%, #f8faff 100%);
+          color: #1f2a44;
+        }
+        .tracker-page {
+          min-height: 100vh;
+          padding: 24px;
+        }
+        .shell {
+          max-width: 980px;
+          margin: 0 auto;
+        }
+        .hero {
+          background: linear-gradient(135deg, #6d5df6 0%, #8a7cff 100%);
+          color: white;
+          border-radius: 28px;
+          padding: 28px;
+          box-shadow: 0 22px 50px rgba(109,93,246,0.25);
+        }
+        .hero h1 {
+          margin: 0;
+          font-size: 2rem;
+          font-weight: 800;
+        }
+        .hero p {
+          margin: 10px 0 0;
+          color: rgba(255,255,255,0.85);
+          line-height: 1.7;
+        }
+        .grid {
+          display: grid;
+          gap: 20px;
+          margin-top: 24px;
+        }
+        @media (min-width: 900px) {
+          .grid {
+            grid-template-columns: 320px 1fr;
+          }
+        }
+        .card {
+          background: white;
+          border-radius: 24px;
+          border: 1px solid #e6ebf5;
+          box-shadow: 0 18px 40px rgba(31,42,68,0.07);
+          padding: 20px;
+        }
+        .card h2 {
+          margin: 0 0 10px;
+          font-size: 1.15rem;
+        }
+        .helper {
+          margin: 0 0 14px;
+          color: #64748b;
+          line-height: 1.7;
+          font-size: 0.95rem;
+        }
+        form {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        input {
+          width: 100%;
+          border: 1px solid #dbe3f0;
+          border-radius: 14px;
+          padding: 14px 16px;
+          font-size: 1rem;
+          outline: none;
+        }
+        input:focus {
+          border-color: #6d5df6;
+          box-shadow: 0 0 0 3px rgba(109,93,246,0.12);
+        }
+        button.primary {
+          border: none;
+          border-radius: 14px;
+          padding: 14px 16px;
+          background: linear-gradient(90deg, #6d5df6 0%, #8a7cff 100%);
+          color: white;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .stats {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        .stat {
+          background: #f9fbff;
+          border: 1px solid #e6ebf5;
+          border-radius: 18px;
+          padding: 16px;
+          text-align: center;
+        }
+        .stat strong {
+          display: block;
+          font-size: 1.5rem;
+        }
+        .stat span {
+          color: #64748b;
+          font-size: 0.9rem;
+        }
+        .list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 16px;
+          border-radius: 16px;
+          border: 1px solid #e6ebf5;
+          background: #ffffff;
+        }
+        .item-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+        }
+        .item-text {
+          word-break: break-word;
+        }
+        .item-text.done {
+          text-decoration: line-through;
+          color: #94a3b8;
+        }
+        .empty {
+          text-align: center;
+          padding: 24px;
+          color: #64748b;
+          border: 1px dashed #d7deee;
+          border-radius: 16px;
+          background: rgba(255,255,255,0.7);
+        }
+        .toolbar {
+          display: flex;
+          justify-content: flex-end;
+          margin-top: 16px;
+        }
+        .clear-btn {
+          border: none;
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: #fee2e2;
+          color: #b91c1c;
+          font-weight: 700;
+          cursor: pointer;
+        }
+      \`}</style>
+
+      <div className="shell">
+        <div className="hero">
+          <h1>Progress Tracker</h1>
+          <p>Track goals, habits, or checklist progress. Your progress is saved automatically.</p>
+        </div>
+
+        <div className="grid">
+          <div className="card">
+            <h2>Add an item</h2>
+            <p className="helper">Create a trackable item and manage it from your dashboard.</p>
+
+            <form onSubmit={addItem}>
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g., Complete design review"
+              />
+              <button className="primary" type="submit">Add Item</button>
+            </form>
+          </div>
+
+          <div className="card">
+            <div className="stats">
+              <div className="stat">
+                <strong>{items.length}</strong>
+                <span>Total</span>
+              </div>
+              <div className="stat">
+                <strong>{completedCount}</strong>
+                <span>Done</span>
+              </div>
+              <div className="stat">
+                <strong>{items.length - completedCount}</strong>
+                <span>Remaining</span>
+              </div>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="empty">No items yet. Add one to start tracking progress.</div>
+            ) : (
+              <>
+                <div className="list">
+                  {items.map((item) => (
+                    <div className="item" key={item.id}>
+                      <div className="item-left">
+                        <input
+                          type="checkbox"
+                          checked={item.done}
+                          onChange={() => toggleItem(item.id)}
+                        />
+                        <span className={\`item-text \${item.done ? "done" : ""}\`}>{item.label}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="toolbar">
+                  <button className="clear-btn" type="button" onClick={clearCompleted}>
+                    Clear Completed
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+  `.trim()
+}
+
+/* -----------------------------
+   GENERIC FALLBACK
+----------------------------- */
+function buildFallbackPage(prompt) {
+  const safePrompt = escapeForTemplateLiteral(prompt || "Generated experience")
+
+  return `
+const GeneratedPage = () => {
+${buildStorageBridgeHelpers("afb_page_generic_fallback", "{ notes: {}, inputs: {} }")}
+
+  const [state, setState] = React.useState(() => readStoredData())
+
+  React.useEffect(() => {
+    writeStoredData(state)
+  }, [state])
+
+  const title = "${safePrompt}".length > 64 ? "${safePrompt}".slice(0, 64) + "..." : "${safePrompt}"
+
+  return (
+    <div className="fallback-page">
+      <style>{\`
+        * { box-sizing: border-box; }
+        body {
+          margin: 0;
+          font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+          background: linear-gradient(180deg, #eef2fb 0%, #f8faff 100%);
+          color: #1f2a44;
+        }
+        .fallback-page {
+          min-height: 100vh;
+          padding: 24px;
+        }
+        .shell {
+          max-width: 1180px;
+          margin: 0 auto;
+        }
+        .hero {
+          border-radius: 30px;
+          padding: 30px;
+          background: linear-gradient(135deg, #6d5df6 0%, #8a7cff 55%, #f472b6 100%);
+          color: white;
+          box-shadow: 0 24px 60px rgba(109,93,246,0.24);
+        }
+        .badge {
+          display: inline-flex;
+          padding: 8px 14px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.14);
+          border: 1px solid rgba(255,255,255,0.18);
+          font-size: 0.8rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+        .hero h1 {
+          margin: 16px 0 0;
+          font-size: 2.2rem;
+          line-height: 1.15;
+          font-weight: 800;
+        }
+        .hero p {
+          margin: 12px 0 0;
+          max-width: 760px;
+          line-height: 1.8;
+          color: rgba(255,255,255,0.88);
+        }
+        .grid {
+          display: grid;
+          gap: 20px;
+          margin-top: 24px;
+        }
+        @media (min-width: 920px) {
+          .grid {
+            grid-template-columns: 1.1fr 0.9fr;
+          }
+        }
+        .card {
+          background: white;
+          border: 1px solid #e6ebf5;
+          border-radius: 24px;
+          padding: 22px;
+          box-shadow: 0 18px 40px rgba(31,42,68,0.07);
+        }
+        .card h2 {
+          margin: 0 0 10px;
+          font-size: 1.15rem;
+        }
+        .muted {
+          color: #64748b;
+          line-height: 1.8;
+        }
+        .list {
+          display: grid;
+          gap: 12px;
+          margin-top: 16px;
+        }
+        .list-item {
+          padding: 14px 16px;
+          border: 1px solid #e6ebf5;
+          border-radius: 16px;
+          background: #f9fbff;
+        }
+        .composer {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 14px;
+        }
+        .composer textarea {
+          width: 100%;
+          min-height: 180px;
+          resize: vertical;
+          border: 1px solid #dbe3f0;
+          border-radius: 16px;
+          padding: 16px;
+          font-size: 1rem;
+          outline: none;
+        }
+        .composer textarea:focus {
+          border-color: #6d5df6;
+          box-shadow: 0 0 0 3px rgba(109,93,246,0.12);
+        }
+        .note-toolbar {
+          display: flex;
+          justify-content: flex-end;
+        }
+        .primary-btn {
+          border: none;
+          border-radius: 14px;
+          padding: 12px 16px;
+          background: linear-gradient(90deg, #6d5df6 0%, #8a7cff 100%);
+          color: white;
+          font-weight: 700;
+          cursor: pointer;
+        }
+      \`}</style>
+
+      <div className="shell">
+        <div className="hero">
+          <div className="badge">AI Generated Experience</div>
+          <h1>{title}</h1>
+          <p>
+            This prompt has been converted into a polished fallback experience so your request always
+            results in a usable page. You can still refine the prompt and regenerate from the admin flow
+            for a more specialized output.
+          </p>
+        </div>
+
+        <div className="grid">
+          <div className="card">
+            <h2>Overview</h2>
+            <p className="muted">
+              Your prompt was interpreted into a clean, production-inspired layout. This fallback keeps
+              the experience useful even when the AI output is not strong enough to safely render the
+              intended feature in its original form.
+            </p>
+
+            <div className="list">
+              <div className="list-item">
+                <strong>Prompt goal</strong>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  ${safePrompt}
+                </div>
+              </div>
+
+              <div className="list-item">
+                <strong>Safe rendering</strong>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  The system returned a stable fallback so the request can still move through preview and review.
+                </div>
+              </div>
+
+              <div className="list-item">
+                <strong>Recommended next step</strong>
+                <div className="muted" style={{ marginTop: 6 }}>
+                  Edit the prompt with more detail or regenerate the page from admin controls.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Scratchpad</h2>
+            <p className="muted">
+              Use this saved notes area to capture ideas or refinements for the next regenerate pass.
+            </p>
+
+            <div className="composer">
+              <textarea
+                value={state?.notes?.draft || ""}
+                onChange={(e) =>
+                  setState((prev) => ({
+                    ...prev,
+                    notes: {
+                      ...(prev?.notes || {}),
+                      draft: e.target.value
+                    }
+                  }))
+                }
+                placeholder="Write improvement notes for this generated page..."
+              />
+              <div className="note-toolbar">
+                <button type="button" className="primary-btn">
+                  Saved automatically
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+  `.trim()
+}
+
+/* -----------------------------
+   PROMPT BUILDERS
+----------------------------- */
+function buildCommonRules() {
+  return `
 STRICT OUTPUT RULES:
 
-1. Create ONLY one component named GeneratedPage.
-2. Do NOT create any other components.
-3. Do NOT write any import statements.
-4. Do NOT write any export statements.
-5. Do NOT create an App component.
-6. Output must be valid JSX that compiles in a React environment.
-7. All UI and logic must be contained inside the GeneratedPage component.
-8. The component must return a single root <div>.
-9. Return ONLY React code.
-10. Do NOT include markdown fences.
-11. Do NOT include explanations, notes, or prose outside the code.
-12. Do NOT use TypeScript.
-13. Do NOT use JSX comments in the output.
-14. The code must be directly usable in a runtime that already has React available.
+1. Create ONLY one top-level component named GeneratedPage.
+2. Do NOT write import statements.
+3. Do NOT write export statements.
+4. Do NOT create an App component.
+5. Output must be valid JSX that compiles in a React environment.
+6. All UI and logic must stay inside the GeneratedPage component scope.
+7. The component must return a single root <div>.
+8. Return ONLY React code.
+9. Do NOT include markdown fences.
+10. Do NOT include explanations or prose outside the code.
+11. Do NOT use TypeScript.
+12. Do NOT use external APIs, remote assets, or external libraries.
 
 REACT RULES:
 
-1. If state is needed, use React.useState.
-2. If effects are needed, use React.useEffect.
-3. Do NOT assume external libraries are available.
-4. Use only standard React and browser APIs.
-5. Code must not crash if rendered directly.
-6. Avoid complex unsupported APIs.
-7. Do NOT use dangerouslySetInnerHTML.
-8. Do NOT fetch external APIs, external images, or remote assets.
-9. Keep all data self-contained inside the component.
-10. Do NOT depend on router, context, npm packages, or environment variables.
-11. Prefer clear helper functions inside the component when needed.
+1. Use React.useState and React.useEffect when needed.
+2. Helper functions inside GeneratedPage are allowed and encouraged.
+3. Complex internal logic is allowed.
+4. Nested render helpers inside GeneratedPage are allowed.
+5. Avoid native form submission navigation. Use e.preventDefault() where needed.
+6. The code must not crash if rendered directly.
+
+PERSISTENCE RULES:
+
+1. If the page contains user-created state, progress, drafts, tasks, notes, tracker items, game progress, form values, or interactive session state, you MUST persist it.
+2. Prefer window.afbStorage.getItem(key) and window.afbStorage.setItem(key, value) if available.
+3. If unavailable, fall back to localStorage.
+4. Use React.useState lazy initialization and React.useEffect for syncing persisted state.
+5. Wrap parsing in try/catch and use safe defaults.
 
 STYLING RULES:
 
-1. DO NOT use Tailwind CSS.
-2. DO NOT use external CSS files.
+1. Do NOT use Tailwind CSS.
+2. Do NOT use external CSS files.
 3. Use inline styles and/or a <style>{\`...\`}</style> block inside the component.
-4. Create a premium modern UI using:
-   - clean spacing
-   - visual hierarchy
-   - rounded corners
-   - soft shadows
-   - responsive layout
-   - strong typography
-   - accessible contrast
-5. The page must be fully responsive for mobile, tablet, and desktop.
-6. Use a professional color palette.
-7. Avoid ugly default browser styling.
-8. Make the design feel complete and visually balanced.
+4. Create a premium, modern, responsive UI.
+5. Strong spacing, rounded corners, shadows, and clear typography are required.
+`
+}
+
+function buildPagePrompt(userPrompt) {
+  return `
+You are a senior frontend engineer and UI/UX designer.
+Generate a polished, production-inspired responsive webpage for the following request.
+
+${buildCommonRules()}
 
 PAGE QUALITY RULES:
 
-1. Generate a FULL webpage or mini-application, not a tiny widget or incomplete fragment.
-2. The output should feel like a real usable page, not a demo fragment.
-3. Include enough sections/content to make the page feel complete.
-4. If the user request is vague, infer a sensible complete structure while staying aligned with the request.
-5. Prefer realistic UI copy and labels over placeholder lorem ipsum.
-6. The page should look portfolio-quality and production-inspired.
-
-FUNCTIONALITY RULES:
-
-1. If the requested page needs interaction, implement it properly.
-2. Buttons, forms, inputs, tabs, toggles, filters, counters, calculators, modals, and lists must work correctly if relevant.
-3. Forms should manage state correctly.
-4. Validation should be basic but sensible where relevant.
-5. Interactive features must feel functional, not fake.
-6. If the request is mainly informational, still make the page visually rich and structured.
-7. If the request includes user-created data such as tasks, notes, lists, trackers, preferences, drafts, entries, bookmarks, or editable items, you MUST persist that data using localStorage.
-8. Do NOT use sessionStorage.
-9. Never seed fake default demo items for persisted apps unless the user explicitly asks for sample data.
-
-PERSISTENCE RULES (MANDATORY FOR TODO / NOTES / TRACKERS / CHECKLISTS / APP-LIKE PAGES):
-
-1. Define a storage key starting with "afb_page_".
-2. Restore state from localStorage using React.useState lazy initialization.
-3. Save state to localStorage using React.useEffect.
-4. Wrap JSON parsing in try/catch.
-5. Never skip persistence for app-like requests.
-6. Avoid native form submission navigation. Use e.preventDefault().
+1. Prioritize visual quality, hierarchy, layout completeness, and responsive structure.
+2. If the prompt is vague, infer a sensible complete page structure.
+3. Include multiple meaningful sections where appropriate.
+4. Prefer realistic labels and content over placeholder text.
 
 Feature to build:
-${safePrompt}
+${userPrompt}
 
-Generate a polished, responsive, functional webpage or mini-application.
 Return ONLY valid React code.
 `
+}
 
-    const result = await model.generateContent(fullPrompt)
-    const response = await result.response
-    const text = response.text()
+function buildToolPrompt(userPrompt) {
+  return `
+You are a senior frontend engineer building an interactive mini-application or business tool.
 
-    const cleaned = sanitizeGeneratedCode(text)
+${buildCommonRules()}
 
-    if (!cleaned.includes("const GeneratedPage")) {
-      throw new Error("Generated code missing GeneratedPage component")
+TOOL QUALITY RULES:
+
+1. Prioritize functionality and usability first, while keeping the UI polished.
+2. Interactive logic must work correctly.
+3. Validation should be sensible and lightweight.
+4. The result should feel like a usable app, not a static mockup.
+
+Feature to build:
+${userPrompt}
+
+Return ONLY valid React code.
+`
+}
+
+function buildGamePrompt(userPrompt) {
+  return `
+You are a senior frontend engineer building a browser-based interactive game or puzzle.
+
+${buildCommonRules()}
+
+GAME QUALITY RULES:
+
+1. Prioritize working game logic over visual ornamentation.
+2. Internal helper functions and structured logic inside GeneratedPage are strongly encouraged.
+3. Use clear state modeling.
+4. The result must be actually playable, not just themed UI.
+5. Persist game progress, board state, score, history, or session progress when relevant.
+6. Avoid oversimplifying the logic into a static placeholder.
+7. Keep the UI visually polished, but do not sacrifice functionality.
+
+Feature to build:
+${userPrompt}
+
+Return ONLY valid React code.
+`
+}
+
+function buildRepairPrompt(badCode, originalPrompt, mode) {
+  return `
+Rewrite the following into a valid single-component React output while preserving the original feature intent.
+
+MODE:
+${mode}
+
+ORIGINAL FEATURE:
+${originalPrompt}
+
+RULES:
+1. Component name must be GeneratedPage.
+2. No imports.
+3. No exports.
+4. No App component.
+5. Return ONLY valid React code.
+6. Keep logic functional.
+7. Keep all helpers inside GeneratedPage.
+8. Keep persistence for interactive state if relevant.
+9. Do not simplify complex logic into a fake static UI unless the code is completely unusable.
+
+BROKEN OR NON-COMPLIANT CODE:
+${badCode}
+`
+}
+
+/* -----------------------------
+   GEMINI CALL
+----------------------------- */
+async function callGemini(promptText) {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash"
+  })
+
+  const result = await model.generateContent(promptText)
+  const response = await result.response
+  return response.text()
+}
+
+/* -----------------------------
+   MAIN GENERATOR
+----------------------------- */
+async function generateReactPage(prompt) {
+  const safePrompt = normalizePrompt(prompt)
+  const mode = classifyPrompt(safePrompt)
+
+  try {
+    if (mode === "todo") {
+      return buildTodoTemplate(safePrompt)
     }
 
-    return cleaned
+    if (mode === "notes") {
+      return buildNotesTemplate()
+    }
+
+    if (mode === "tracker") {
+      return buildTrackerTemplate()
+    }
+
+    let primaryPrompt = buildPagePrompt(safePrompt)
+
+    if (mode === "tool") {
+      primaryPrompt = buildToolPrompt(safePrompt)
+    }
+
+    if (mode === "game") {
+      primaryPrompt = buildGamePrompt(safePrompt)
+    }
+
+    // Primary generation
+    const primaryText = await callGemini(primaryPrompt)
+    let cleaned = sanitizeGeneratedCode(primaryText)
+
+    if (isValidGeneratedCode(cleaned)) {
+      return cleaned
+    }
+
+    console.log(`⚠️ Primary generation invalid for mode "${mode}", trying repair pass...`)
+
+    // Repair pass
+    const repairedText = await callGemini(
+      buildRepairPrompt(cleaned || primaryText, safePrompt, mode)
+    )
+    cleaned = sanitizeGeneratedCode(repairedText)
+
+    if (isValidGeneratedCode(cleaned)) {
+      return cleaned
+    }
+
+    console.log(`⚠️ Repair pass invalid for mode "${mode}", using fallback...`)
+
+    // Universal fallback
+    return buildFallbackPage(safePrompt)
   } catch (err) {
     console.error("Gemini error:", err)
-    throw new Error("AI generation failed")
+    return buildFallbackPage(safePrompt)
   }
 }
 

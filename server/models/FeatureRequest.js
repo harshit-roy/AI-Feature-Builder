@@ -60,9 +60,27 @@ const featureRequestSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+
     displayName: {
       type: String,
-      default: ""
+      default: "",
+      trim: true
+    },
+
+    lastError: {
+      type: String,
+      default: "",
+      trim: true
+    },
+
+    generationAttempts: {
+      type: Number,
+      default: 0
+    },
+
+    lastGeneratedAt: {
+      type: Date,
+      default: null
     }
   },
   {

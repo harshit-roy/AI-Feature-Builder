@@ -2,7 +2,6 @@ const FeatureRequest = require("../models/FeatureRequest")
 const generateReactPage = require("../services/aiService")
 const slugify = require("slugify")
 
-// 🔥 VALIDATE AI OUTPUT
 const isValidGeneratedCode = (code) => {
   if (!code || typeof code !== "string") return false
   if (!code.includes("const GeneratedPage")) return false
@@ -21,6 +20,61 @@ const createUniqueSlug = async (prompt) => {
   }
 
   return slug
+}
+
+const runGenerationForRequest = async (request) => {
+  request.status = "generating"
+  request.lastError = ""
+  request.generationAttempts = (request.generationAttempts || 0) + 1
+  request.lastGeneratedAt = new Date()
+  await request.save()
+
+  try {
+    const code = await generateReactPage(request.prompt)
+
+    if (!isValidGeneratedCode(code)) {
+      request.status = "failed"
+      request.lastError = "Invalid AI output: GeneratedPage component missing"
+      await request.save()
+
+      return {
+        success: false,
+        statusCode: 500,
+        message: "Invalid AI output",
+        request
+      }
+    }
+
+    const slug = request.pageSlug || (await createUniqueSlug(request.prompt))
+
+    request.generatedCode = code
+    request.pageSlug = slug
+    request.previewUrl = `/preview/${slug}`
+    request.status = "approved"
+    request.lastError = ""
+
+    await request.save()
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: "Feature approved and AI page generated",
+      request
+    }
+  } catch (aiErr) {
+    console.error("AI generation error:", aiErr.message)
+
+    request.status = "failed"
+    request.lastError = aiErr.message || "AI generation failed"
+    await request.save()
+
+    return {
+      success: false,
+      statusCode: 500,
+      message: "AI generation failed",
+      request
+    }
+  }
 }
 
 // create feature request
@@ -47,7 +101,10 @@ exports.createRequest = async (req, res) => {
       generatedCode: "",
       status: "pending",
       pageSlug: slug,
-      previewUrl: `/preview/${slug}`
+      previewUrl: `/preview/${slug}`,
+      lastError: "",
+      generationAttempts: 0,
+      lastGeneratedAt: null
     })
 
     return res.status(201).json({
@@ -99,49 +156,71 @@ exports.approveRequest = async (req, res) => {
       return res.status(404).json({ message: "Request not found" })
     }
 
-    request.status = "generating"
-    await request.save()
+    const result = await runGenerationForRequest(request)
 
-    try {
-      const code = await generateReactPage(request.prompt)
-
-      // 🔥 VALIDATE AI OUTPUT
-      if (!isValidGeneratedCode(code)) {
-        request.status = "failed"
-        await request.save()
-
-        return res.status(500).json({
-          message: "Invalid AI output",
-          request
-        })
-      }
-
-      const slug = request.pageSlug || (await createUniqueSlug(request.prompt))
-
-      request.generatedCode = code
-      request.pageSlug = slug
-      request.previewUrl = `/preview/${slug}`
-      request.status = "approved"
-
-      await request.save()
-
-      return res.json({
-        message: "Feature approved and AI page generated",
-        request
-      })
-    } catch (aiErr) {
-      console.error("AI generation error:", aiErr.message)
-
-      request.status = "failed"
-      await request.save()
-
-      return res.status(500).json({
-        message: "AI generation failed",
-        request
-      })
-    }
+    return res.status(result.statusCode).json({
+      message: result.message,
+      request: result.request
+    })
   } catch (err) {
     console.error("Approve request error:", err)
+    return res.status(500).json({ message: "Server error" })
+  }
+}
+
+// retry / generate again with optional prompt update
+exports.retryGenerateRequest = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { prompt } = req.body
+
+    const request = await FeatureRequest.findById(id)
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found" })
+    }
+
+    if (prompt && typeof prompt === "string" && prompt.trim()) {
+      request.prompt = prompt.trim()
+    }
+
+    const result = await runGenerationForRequest(request)
+
+    return res.status(result.statusCode).json({
+      message: result.message,
+      request: result.request
+    })
+  } catch (err) {
+    console.error("Retry request error:", err)
+    return res.status(500).json({ message: "Server error" })
+  }
+}
+
+// update prompt only before retry if admin wants to edit it first
+exports.updatePrompt = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { prompt } = req.body
+
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return res.status(400).json({ message: "Valid prompt is required" })
+    }
+
+    const request = await FeatureRequest.findById(id)
+
+    if (!request) {
+      return res.status(404).json({ message: "Request not found" })
+    }
+
+    request.prompt = prompt.trim()
+    await request.save()
+
+    return res.json({
+      message: "Prompt updated successfully",
+      request
+    })
+  } catch (err) {
+    console.error("Update prompt error:", err)
     return res.status(500).json({ message: "Server error" })
   }
 }
@@ -186,7 +265,10 @@ exports.getPreviewBySlug = async (req, res) => {
       prompt: feature.prompt,
       status: feature.status,
       pageSlug: feature.pageSlug,
-      previewUrl: feature.previewUrl || ""
+      previewUrl: feature.previewUrl || "",
+      lastError: feature.lastError || "",
+      generationAttempts: feature.generationAttempts || 0,
+      lastGeneratedAt: feature.lastGeneratedAt || null
     })
   } catch (err) {
     console.error("Preview error:", err)
@@ -243,6 +325,7 @@ exports.updateFeatureCode = async (req, res) => {
     }
 
     feature.generatedCode = code.trim()
+    feature.lastError = ""
     await feature.save()
 
     return res.json({
@@ -278,6 +361,7 @@ exports.deployFeature = async (req, res) => {
     feature.status = "deployed"
     feature.deployedAt = new Date()
     feature.deployedUrl = `/live/${feature.pageSlug}`
+    feature.lastError = ""
 
     await feature.save()
 
