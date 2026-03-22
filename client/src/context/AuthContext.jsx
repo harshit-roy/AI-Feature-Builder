@@ -8,11 +8,20 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const savedUser = localStorage.getItem("user")
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    try {
+      const savedUser = localStorage.getItem("user")
+
+      if (savedUser) {
+        const parsedUser = JSON.parse(savedUser)
+        setUser(parsedUser)
+      }
+    } catch (err) {
+      console.error("Failed to restore user from localStorage:", err)
+      localStorage.removeItem("user")
+      localStorage.removeItem("token")
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   const loginUser = async (email, password) => {
@@ -33,7 +42,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       return {
         success: false,
-        message: err.response?.data?.message || "Error"
+        message: err.response?.data?.message || "Something went wrong. Please try again."
       }
     }
   }
@@ -56,7 +65,7 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       return {
         success: false,
-        message: err.response?.data?.message || "Error"
+        message: err.response?.data?.message || "Something went wrong. Please try again."
       }
     }
   }
@@ -64,8 +73,14 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem("token")
     localStorage.removeItem("user")
+
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("afb_page_")) {
+        localStorage.removeItem(key)
+      }
+    })
+
     setUser(null)
-    window.location.href = "/"
   }
 
   return (

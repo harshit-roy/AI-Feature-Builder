@@ -4,7 +4,7 @@ import { useNavigate, Link } from "react-router-dom"
 import { FaEnvelope, FaLock, FaUserPlus, FaSpinner } from "react-icons/fa"
 
 export default function Signup() {
-  const { signupUser } = useContext(AuthContext)
+  const { user, loading: authLoading, signupUser } = useContext(AuthContext)
   const navigate = useNavigate()
 
   const [email, setEmail] = useState("")
@@ -16,36 +16,71 @@ export default function Signup() {
     document.title = "Signup • AI Feature Builder"
   }, [])
 
+  useEffect(() => {
+    if (authLoading) return
+    if (user) navigate("/dashboard")
+  }, [user, authLoading, navigate])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
+
+    if (loading) return
+
+    const trimmedEmail = email.trim()
+
+    if (!trimmedEmail || !password.trim()) {
+      setError("Please enter email and password.")
+      return
+    }
+
+    if (!/\S+@\S+\.\S+/.test(trimmedEmail)) {
+      setError("Please enter a valid email address.")
+      return
+    }
+
+    if (password.trim().length < 6) {
+      setError("Password must be at least 6 characters.")
+      return
+    }
+
     setError("")
     setLoading(true)
 
-    const res = await signupUser(email, password)
+    try {
+      const res = await signupUser(trimmedEmail, password)
 
-    if (res.success) {
-      navigate("/dashboard")
-    } else {
-      setError(res.message)
+      if (res.success) {
+        navigate("/dashboard")
+      } else {
+        setError(res.message || "Signup failed. Please try again.")
+      }
+    } catch (err) {
+      setError("Something went wrong. Please try again.")
+    } finally {
+      setLoading(false)
     }
+  }
 
-    setLoading(false)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#EEF2FB] flex items-center justify-center px-4">
+        <div className="inline-flex items-center gap-3 rounded-2xl border border-[#E6EBF5] bg-white px-5 py-4 text-[#64748B] shadow-sm">
+          <FaSpinner className="animate-spin text-[#6D5DF6]" />
+          Checking session...
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-[#EEF2FB] flex items-center justify-center px-4 py-10 relative overflow-hidden">
-
-      {/* Background */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-[-80px] right-[-80px] h-[300px] w-[300px] bg-[#8A7CFF]/20 blur-3xl rounded-full" />
         <div className="absolute bottom-[-80px] left-[-80px] h-[300px] w-[300px] bg-[#F472B6]/15 blur-3xl rounded-full" />
       </div>
 
       <div className="w-full max-w-5xl grid lg:grid-cols-2 rounded-[32px] overflow-hidden border border-[#E6EBF5] bg-white shadow-[0_30px_80px_rgba(31,42,68,0.08)]">
-
-        {/* Left Panel */}
         <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-to-br from-[#EEF2FF] via-white to-[#FDF4FB] border-r border-[#E6EBF5]">
-          
           <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#EEF2FF] text-[#6D5DF6] text-sm font-semibold mb-6">
               Create Account
@@ -73,10 +108,8 @@ export default function Signup() {
           </div>
         </div>
 
-        {/* Right Panel */}
         <div className="p-6 sm:p-8 md:p-10">
           <div className="max-w-md mx-auto w-full">
-
             <div className="mb-8">
               <h2 className="text-3xl font-extrabold text-[#1F2A44]">Signup</h2>
               <p className="text-[#64748B] mt-2">
@@ -91,8 +124,6 @@ export default function Signup() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-
-              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-[#64748B] mb-2">
                   Email Address
@@ -103,13 +134,15 @@ export default function Signup() {
                     type="email"
                     placeholder="Enter your email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value)
+                      if (error) setError("")
+                    }}
                     className="w-full rounded-2xl border border-[#E6EBF5] bg-[#F9FBFF] pl-11 pr-4 py-3.5 text-[#1F2A44] placeholder:text-[#94A3B8] outline-none focus:border-[#6D5DF6] focus:ring-2 focus:ring-[#6D5DF6]/10 transition"
                   />
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="block text-sm font-medium text-[#64748B] mb-2">
                   Password
@@ -120,17 +153,19 @@ export default function Signup() {
                     type="password"
                     placeholder="Create a password"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      if (error) setError("")
+                    }}
                     className="w-full rounded-2xl border border-[#E6EBF5] bg-[#F9FBFF] pl-11 pr-4 py-3.5 text-[#1F2A44] placeholder:text-[#94A3B8] outline-none focus:border-[#6D5DF6] focus:ring-2 focus:ring-[#6D5DF6]/10 transition"
                   />
                 </div>
               </div>
 
-              {/* Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-2xl bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] text-white font-semibold py-3.5 flex items-center justify-center gap-2 shadow-md hover:opacity-90 transition disabled:opacity-60"
+                className="w-full rounded-2xl bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] text-white font-semibold py-3.5 flex items-center justify-center gap-2 shadow-md hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>

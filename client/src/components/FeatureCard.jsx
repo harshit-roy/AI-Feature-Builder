@@ -5,7 +5,8 @@ import {
   FaGear,
   FaCircleCheck,
   FaRocket,
-  FaCircleXmark
+  FaCircleXmark,
+  FaDownload
 } from "react-icons/fa6"
 
 export default function FeatureCard({ feature, darkMode = false }) {
@@ -90,10 +91,37 @@ export default function FeatureCard({ feature, darkMode = false }) {
     }
   }
 
+  const handleDownloadCode = () => {
+    if (!feature?.generatedCode?.trim()) return
+
+    const safeName =
+      (feature.displayName || feature.pageSlug || "generated-page")
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "") || "generated-page"
+
+    const blob = new Blob([feature.generatedCode], {
+      type: "text/javascript;charset=utf-8"
+    })
+    const url = URL.createObjectURL(blob)
+
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${safeName}.jsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    URL.revokeObjectURL(url)
+  }
+
   const statusMeta = getStatusMeta(feature.status)
   const title = feature.displayName || feature.prompt || "Untitled feature"
   const previewText =
     title.length > 110 ? `${title.slice(0, 110)}...` : title
+
+  const canDownloadCode = !!feature?.generatedCode?.trim()
 
   return (
     <div
@@ -125,21 +153,38 @@ export default function FeatureCard({ feature, darkMode = false }) {
         </div>
       </div>
 
-      {feature.pageSlug && feature.status === "deployed" && (
-        <div className="mt-4">
-          <Link
-            to={`/live/${feature.pageSlug}`}
-            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-              darkMode
-                ? "bg-white/10 text-white hover:bg-white/15"
-                : "bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] text-white shadow-[0_12px_24px_rgba(109,93,246,0.22)] hover:opacity-95"
-            }`}
-          >
-            Open deployed page
-            <FaArrowRight className="text-xs" />
-          </Link>
+      {(feature.pageSlug && feature.status === "deployed") || canDownloadCode ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {feature.pageSlug && feature.status === "deployed" && (
+            <Link
+              to={`/live/${feature.pageSlug}`}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                darkMode
+                  ? "bg-white/10 text-white hover:bg-white/15"
+                  : "bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] text-white shadow-[0_12px_24px_rgba(109,93,246,0.22)] hover:opacity-95"
+              }`}
+            >
+              Open deployed page
+              <FaArrowRight className="text-xs" />
+            </Link>
+          )}
+
+          {canDownloadCode && (
+            <button
+              type="button"
+              onClick={handleDownloadCode}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
+                darkMode
+                  ? "bg-white/10 text-white hover:bg-white/15"
+                  : "border border-[#DCE4F3] bg-[#F9FBFF] text-[#1F2A44] hover:border-[#C9D6EE] hover:bg-white"
+              }`}
+            >
+              <FaDownload className="text-sm" />
+              Download code
+            </button>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

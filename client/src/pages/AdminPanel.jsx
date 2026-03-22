@@ -1,6 +1,7 @@
 import { useContext, useEffect, useMemo, useState } from "react"
 import { AuthContext } from "../context/AuthContext"
 import api from "../api/axios"
+import { useNavigate } from "react-router-dom"
 import {
   FaCheck,
   FaTimes,
@@ -15,7 +16,8 @@ import {
 } from "react-icons/fa"
 
 export default function AdminPanel() {
-  const { user, logout } = useContext(AuthContext)
+  const { user, logout, loading: authLoading } = useContext(AuthContext)
+  const navigate = useNavigate()
 
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(false)
@@ -26,7 +28,8 @@ export default function AdminPanel() {
   const [search, setSearch] = useState("")
 
   const fetchActiveUsers = async () => {
-    if (!user) return
+    if (!user?.token) return
+
     try {
       const res = await api.get("/admin/active-users", {
         headers: { Authorization: `Bearer ${user.token}` }
@@ -37,24 +40,15 @@ export default function AdminPanel() {
     }
   }
 
-  useEffect(() => {
-    document.title = "Admin • AI Feature Builder"
-  }, [])
-
-  useEffect(() => {
-    fetchActiveUsers()
-    const interval = setInterval(fetchActiveUsers, 10000)
-    return () => clearInterval(interval)
-  }, [user])
-
   const fetchRequests = async () => {
-    if (!user) return
+    if (!user?.token) return
 
     setLoading(true)
     try {
       const res = await api.get("/features/admin/all", {
         headers: { Authorization: `Bearer ${user.token}` }
       })
+
       setRequests(res.data)
 
       const initialNames = {}
@@ -64,97 +58,100 @@ export default function AdminPanel() {
       setEditedNames(initialNames)
     } catch (err) {
       console.log(err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   useEffect(() => {
+    document.title = "Admin • AI Feature Builder"
+  }, [])
+
+  useEffect(() => {
+    if (authLoading) return
+
+    if (!user) {
+      navigate("/login")
+      return
+    }
+
     fetchRequests()
-  }, [user])
+    fetchActiveUsers()
+
+    const interval = setInterval(fetchActiveUsers, 10000)
+    return () => clearInterval(interval)
+  }, [user, authLoading, navigate])
+
+  const handleAction = async (id, actionType, apiCall) => {
+    if (!user?.token) return
+
+    setLoadingRow(id)
+    setLoadingAction(actionType)
+
+    try {
+      await apiCall()
+      await fetchRequests()
+    } catch (err) {
+      console.log(err)
+    } finally {
+      setLoadingRow(null)
+      setLoadingAction("")
+    }
+  }
 
   const handleApprove = async (id) => {
-    setLoadingRow(id)
-    setLoadingAction("approve")
-    try {
-      await api.put(
+    await handleAction(id, "approve", () =>
+      api.put(
         `/features/admin/approve/${id}`,
         {},
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
-      await fetchRequests()
-    } catch (err) {
-      console.log(err)
-    }
-    setLoadingRow(null)
-    setLoadingAction("")
+    )
   }
 
   const handleReject = async (id) => {
-    setLoadingRow(id)
-    setLoadingAction("reject")
-    try {
-      await api.put(
+    await handleAction(id, "reject", () =>
+      api.put(
         `/features/admin/reject/${id}`,
         {},
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
-      await fetchRequests()
-    } catch (err) {
-      console.log(err)
-    }
-    setLoadingRow(null)
-    setLoadingAction("")
+    )
   }
 
   const handleDeploy = async (slug, id) => {
-    setLoadingRow(id)
-    setLoadingAction("deploy")
-    try {
-      await api.put(
+    await handleAction(id, "deploy", () =>
+      api.put(
         `/features/deploy/${slug}`,
         {},
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
-      await fetchRequests()
-    } catch (err) {
-      console.log(err)
-    }
-    setLoadingRow(null)
-    setLoadingAction("")
+    )
   }
 
   const handleRollback = async (slug, id) => {
-    setLoadingRow(id)
-    setLoadingAction("rollback")
-    try {
-      await api.put(
+    await handleAction(id, "rollback", () =>
+      api.put(
         `/features/rollback/${slug}`,
         {},
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
-      await fetchRequests()
-    } catch (err) {
-      console.log(err)
-    }
-    setLoadingRow(null)
-    setLoadingAction("")
+    )
   }
 
   const handleSaveDisplayName = async (id) => {
-    setLoadingRow(id)
-    setLoadingAction("save")
-    try {
-      await api.put(
+    await handleAction(id, "save", () =>
+      api.put(
         `/features/admin/display-name/${id}`,
         { displayName: editedNames[id] || "" },
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
-      await fetchRequests()
-    } catch (err) {
-      console.log(err)
-    }
-    setLoadingRow(null)
-    setLoadingAction("")
+    )
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate("/")
   }
 
   const filteredRequests = useMemo(() => {
@@ -174,14 +171,26 @@ export default function AdminPanel() {
 
   const statusBadge = (status) => {
     if (status === "pending") return "bg-amber-50 text-amber-700 border border-amber-100"
-    if (status === "approved" || status === "preview-ready")
+    if (status === "approved" || status === "preview-ready") {
       return "bg-emerald-50 text-emerald-700 border border-emerald-100"
+    }
     if (status === "deployed") return "bg-violet-50 text-violet-700 border border-violet-100"
     if (status === "generating") return "bg-sky-50 text-sky-700 border border-sky-100"
     return "bg-red-50 text-red-700 border border-red-100"
   }
 
   const isRowLoading = (id, action) => loadingRow === id && loadingAction === action
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#EEF2FB] flex items-center justify-center">
+        <div className="inline-flex items-center gap-3 rounded-2xl border border-[#E6EBF5] bg-white px-5 py-4 text-[#64748B] shadow-sm">
+          <FaSpinner className="animate-spin text-[#6D5DF6]" />
+          Loading admin panel...
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#EEF2FB] text-[#1F2A44]">
@@ -241,7 +250,7 @@ export default function AdminPanel() {
 
             <button
               className="rounded-2xl bg-[#1F2A44] px-5 py-3 text-white font-semibold hover:opacity-90 transition"
-              onClick={logout}
+              onClick={handleLogout}
             >
               Logout
             </button>
@@ -336,7 +345,11 @@ export default function AdminPanel() {
                         </td>
 
                         <td className="px-6 py-5 align-top">
-                          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold capitalize ${statusBadge(r.status)}`}>
+                          <span
+                            className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold capitalize ${statusBadge(
+                              r.status
+                            )}`}
+                          >
                             {r.status}
                           </span>
                         </td>
@@ -413,25 +426,26 @@ export default function AdminPanel() {
                               </>
                             )}
 
-                            {(r.status === "approved" || r.status === "preview-ready") && r.pageSlug && (
-                              <button
-                                className="inline-flex min-w-[100px] items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-3 py-2.5 text-white transition hover:opacity-90 disabled:opacity-60"
-                                disabled={loadingRow === r._id}
-                                onClick={() => handleDeploy(r.pageSlug, r._id)}
-                              >
-                                {isRowLoading(r._id, "deploy") ? (
-                                  <>
-                                    <FaSpinner className="animate-spin" />
-                                    <span className="text-sm font-medium">Deploying</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FaRocket />
-                                    <span className="text-sm font-medium">Deploy</span>
-                                  </>
-                                )}
-                              </button>
-                            )}
+                            {(r.status === "approved" || r.status === "preview-ready") &&
+                              r.pageSlug && (
+                                <button
+                                  className="inline-flex min-w-[100px] items-center justify-center gap-2 rounded-xl bg-[#6D5DF6] px-3 py-2.5 text-white transition hover:opacity-90 disabled:opacity-60"
+                                  disabled={loadingRow === r._id}
+                                  onClick={() => handleDeploy(r.pageSlug, r._id)}
+                                >
+                                  {isRowLoading(r._id, "deploy") ? (
+                                    <>
+                                      <FaSpinner className="animate-spin" />
+                                      <span className="text-sm font-medium">Deploying</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FaRocket />
+                                      <span className="text-sm font-medium">Deploy</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
 
                             {r.status === "deployed" && r.pageSlug && (
                               <button
@@ -485,7 +499,11 @@ export default function AdminPanel() {
                       </h3>
                     </div>
 
-                    <span className={`shrink-0 inline-flex px-3 py-1 rounded-full text-xs font-semibold capitalize ${statusBadge(r.status)}`}>
+                    <span
+                      className={`shrink-0 inline-flex px-3 py-1 rounded-full text-xs font-semibold capitalize ${statusBadge(
+                        r.status
+                      )}`}
+                    >
                       {r.status}
                     </span>
                   </div>

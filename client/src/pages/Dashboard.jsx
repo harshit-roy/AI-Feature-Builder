@@ -5,18 +5,20 @@ import { useNavigate } from "react-router-dom"
 import {
   FaSpinner,
   FaPlus,
-  FaArrowRight,
   FaRegClock,
   FaRegCircleCheck,
   FaRocket,
   FaCircleExclamation,
   FaWandMagicSparkles,
-  FaChartLine
+  FaChartLine,
+  FaArrowTrendUp,
+  FaPenToSquare,
+  FaLayerGroup
 } from "react-icons/fa6"
 import FeatureCard from "../components/FeatureCard"
 
 export default function Dashboard() {
-  const { user, logout } = useContext(AuthContext)
+  const { user, logout, loading: authLoading } = useContext(AuthContext)
   const navigate = useNavigate()
 
   const [prompt, setPrompt] = useState("")
@@ -26,6 +28,8 @@ export default function Dashboard() {
   const [submitMessage, setSubmitMessage] = useState("")
 
   const fetchRequests = async () => {
+    if (!user?.token) return
+
     try {
       const res = await api.get("/features/my", {
         headers: { Authorization: `Bearer ${user.token}` }
@@ -41,13 +45,28 @@ export default function Dashboard() {
   }, [])
 
   useEffect(() => {
-    if (!user) navigate("/login")
-    else fetchRequests()
-  }, [user])
+    if (authLoading) return
+
+    if (!user) {
+      navigate("/login")
+      return
+    }
+
+    fetchRequests()
+  }, [user, authLoading, navigate])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!prompt.trim()) return
+
+    if (loading) return
+
+    const trimmedPrompt = prompt.trim()
+
+    if (!trimmedPrompt) {
+      setError("Please enter a valid prompt.")
+      setSubmitMessage("")
+      return
+    }
 
     setLoading(true)
     setError("")
@@ -56,18 +75,23 @@ export default function Dashboard() {
     try {
       const res = await api.post(
         "/features/request",
-        { prompt },
+        { prompt: trimmedPrompt },
         { headers: { Authorization: `Bearer ${user.token}` } }
       )
 
-      setRequests([res.data.feature, ...requests])
+      setRequests((prev) => [res.data.feature, ...prev])
       setPrompt("")
       setSubmitMessage("Your request is in progress. Admin review will happen next.")
     } catch (err) {
-      setError(err.response?.data?.message || "Error")
+      setError(err.response?.data?.message || "Something went wrong.")
+    } finally {
+      setLoading(false)
     }
+  }
 
-    setLoading(false)
+  const handleLogout = () => {
+    logout()
+    navigate("/")
   }
 
   const readyRequests = useMemo(
@@ -104,6 +128,17 @@ export default function Dashboard() {
     user?.email?.split("@")[0]?.replace(/[._-]/g, " ")?.replace(/\b\w/g, (c) => c.toUpperCase()) ||
     "User"
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#EEF2FB] flex items-center justify-center">
+        <div className="inline-flex items-center gap-3 rounded-2xl border border-[#E6EBF5] bg-white px-5 py-4 text-[#64748B] shadow-sm">
+          <FaSpinner className="animate-spin text-[#6D5DF6]" />
+          Loading dashboard...
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#EEF2FB] text-[#1F2A44]">
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -113,7 +148,7 @@ export default function Dashboard() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-        {/* Hero */}
+        {/* HERO */}
         <section className="rounded-[32px] border border-white/80 bg-white/80 p-5 shadow-[0_24px_60px_rgba(31,42,68,0.07)] backdrop-blur-sm sm:p-6 lg:p-8">
           <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
             <div>
@@ -128,8 +163,8 @@ export default function Dashboard() {
 
               <p className="mt-3 max-w-2xl text-sm leading-7 text-[#64748B] sm:text-base">
                 Submit prompts, track request progress, and monitor which pages are ready
-                for preview or already deployed. The final deployment workflow still stays
-                under admin control.
+                for preview or already deployed. The final deployment workflow stays under
+                admin control, while you can manage and monitor everything from here.
               </p>
 
               <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -169,8 +204,8 @@ export default function Dashboard() {
                 <div className="mt-5">
                   <h2 className="text-xl font-bold">Request Activity</h2>
                   <p className="mt-2 text-sm leading-6 text-white/85">
-                    Use the prompt box below to request a new feature page. Pages that
-                    reach preview-ready or deployed status will appear in the featured section.
+                    Your dashboard is now organized around action first. Start with a new
+                    request, then monitor what is in progress, ready for preview, or live.
                   </p>
                 </div>
               </div>
@@ -189,7 +224,7 @@ export default function Dashboard() {
                 </div>
 
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="mt-5 w-full rounded-2xl bg-[#1F2A44] px-4 py-3 font-semibold text-white transition hover:opacity-90"
                 >
                   Logout
@@ -199,67 +234,121 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Request form */}
-        <section className="mt-6 rounded-[32px] border border-white/80 bg-white/85 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6 lg:p-8">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6D5DF6]">
-                New Request
-              </p>
-              <h2 className="mt-2 text-2xl font-bold sm:text-3xl">
-                Describe the feature you want to generate
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-7 text-[#64748B] sm:text-base">
-                Keep the prompt clear and specific. The admin team will review it before
-                the final deployment flow continues.
-              </p>
+        {/* NEW REQUEST - HIGHLIGHTED */}
+        <section className="mt-6 rounded-[34px] border border-[#CFC6FF] bg-gradient-to-br from-[#6D5DF6] via-[#7C6BFF] to-[#8A7CFF] p-[1px] shadow-[0_28px_60px_rgba(109,93,246,0.22)]">
+          <div className="rounded-[33px] bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(247,248,255,0.98)_100%)] p-5 sm:p-6 lg:p-8">
+            <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#F1EEFF] px-4 py-2 text-sm font-semibold text-[#6D5DF6] shadow-sm">
+                  <FaPenToSquare />
+                  Start Here
+                </div>
+
+                <h2 className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl text-[#1F2A44]">
+                  Create your next AI-generated page
+                </h2>
+
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-[#64748B] sm:text-base">
+                  This is the main action area of your dashboard. Describe the page you want
+                  as clearly as possible and the system will push it into the admin review flow.
+                </p>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-[#E6EBF5] bg-white p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-[#6D5DF6] font-semibold text-sm">
+                      <FaLayerGroup />
+                      Be specific
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[#64748B]">
+                      Mention layout, sections, interactions, and style expectations.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E6EBF5] bg-white p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-[#6D5DF6] font-semibold text-sm">
+                      <FaArrowTrendUp />
+                      Better output
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[#64748B]">
+                      Clear prompts usually generate more complete and production-like pages.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E6EBF5] bg-white p-4 shadow-sm">
+                    <div className="flex items-center gap-2 text-[#6D5DF6] font-semibold text-sm">
+                      <FaRocket />
+                      Review flow
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-[#64748B]">
+                      Requests move to admin review before they become preview-ready or live.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-[#E6EBF5] bg-white p-5 shadow-[0_18px_40px_rgba(31,42,68,0.08)] sm:p-6">
+                <div className="mb-5">
+                  <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6D5DF6]">
+                    New Request
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-[#1F2A44]">
+                    Describe the feature you want
+                  </h3>
+                  <p className="mt-2 text-sm leading-7 text-[#64748B]">
+                    Example: A premium pricing page with toggle, testimonials, and FAQ.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSubmit}>
+                  <div className="space-y-4">
+                    <div className="rounded-[24px] border border-[#DDD8FF] bg-[#F8F7FF] p-2 shadow-inner">
+                      <input
+                        type="text"
+                        placeholder="Type your feature request here..."
+                        value={prompt}
+                        onChange={(e) => {
+                          setPrompt(e.target.value)
+                          if (error) setError("")
+                        }}
+                        className="w-full rounded-[18px] border-0 bg-white px-5 py-4 text-[#1F2A44] outline-none placeholder:text-[#94A3B8] focus:ring-2 focus:ring-[#6D5DF6]/12"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-[22px] bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] px-6 py-4 font-semibold text-white shadow-[0_16px_30px_rgba(109,93,246,0.25)] transition hover:opacity-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {loading ? <FaSpinner className="animate-spin" /> : <FaPlus />}
+                      {loading ? "Requesting..." : "Submit Request"}
+                    </button>
+                  </div>
+
+                  {error && (
+                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                      {error}
+                    </div>
+                  )}
+
+                  {submitMessage && (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                      {submitMessage}
+                    </div>
+                  )}
+
+                  {loading && (
+                    <div className="mt-4 inline-flex items-center gap-3 rounded-2xl bg-[#EEF2FF] px-4 py-3 text-sm font-medium text-[#6D5DF6]">
+                      <FaSpinner className="animate-spin" />
+                      Your request is in progress...
+                    </div>
+                  )}
+                </form>
+              </div>
             </div>
           </div>
-
-          <form onSubmit={handleSubmit} className="mt-6">
-            <div className="flex flex-col gap-4 xl:flex-row">
-              <div className="flex-1">
-                <input
-                  type="text"
-                  placeholder="E.g., A login page with animated background, premium cards, and call-to-action section..."
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  className="w-full rounded-[24px] border border-[#E6EBF5] bg-[#F9FBFF] px-5 py-4 text-[#1F2A44] outline-none transition placeholder:text-[#94A3B8] focus:border-[#6D5DF6] focus:ring-2 focus:ring-[#6D5DF6]/10"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex min-w-[190px] items-center justify-center gap-2 rounded-[24px] bg-gradient-to-r from-[#6D5DF6] to-[#8A7CFF] px-6 py-4 font-semibold text-white shadow-[0_14px_28px_rgba(109,93,246,0.24)] transition hover:opacity-95 disabled:opacity-60"
-              >
-                {loading ? <FaSpinner className="animate-spin" /> : <FaPlus />}
-                {loading ? "Requesting..." : "Request Deploy"}
-              </button>
-            </div>
-
-            {error && (
-              <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                {error}
-              </div>
-            )}
-
-            {submitMessage && (
-              <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                {submitMessage}
-              </div>
-            )}
-
-            {loading && (
-              <div className="mt-4 inline-flex items-center gap-3 rounded-2xl bg-[#EEF2FF] px-4 py-3 text-sm font-medium text-[#6D5DF6]">
-                <FaSpinner className="animate-spin" />
-                Your request is in progress...
-              </div>
-            )}
-          </form>
         </section>
 
-        {/* Ready section */}
+        {/* FEATURED */}
         <section className="mt-6">
           <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -271,7 +360,7 @@ export default function Dashboard() {
               </h2>
             </div>
             <div className="text-sm text-[#64748B]">
-              Highlighted section for requests closest to completion
+              Your highest-value requests closest to completion
             </div>
           </div>
 
@@ -280,7 +369,7 @@ export default function Dashboard() {
               {readyRequests.map((req) => (
                 <div
                   key={req._id}
-                  className="min-w-[300px] max-w-[360px] flex-1 snap-start rounded-[28px] border border-white/80 bg-white/85 p-3 shadow-[0_18px_40px_rgba(31,42,68,0.06)]"
+                  className="min-w-[300px] max-w-[360px] flex-1 snap-start rounded-[28px] border border-white/80 bg-white/90 p-3 shadow-[0_18px_40px_rgba(31,42,68,0.06)]"
                 >
                   <FeatureCard feature={req} />
                 </div>
@@ -293,9 +382,9 @@ export default function Dashboard() {
           )}
         </section>
 
-        {/* Progress + rejected */}
+        {/* PROGRESS + REJECTED */}
         <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[32px] border border-white/80 bg-white/85 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6">
+          <div className="rounded-[32px] border border-white/80 bg-white/90 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-[#FFF7ED] p-3 text-[#F59E0B]">
                 <FaRegClock />
@@ -303,7 +392,7 @@ export default function Dashboard() {
               <div>
                 <h3 className="text-xl font-bold">Pending & Generating</h3>
                 <p className="text-sm text-[#64748B]">
-                  Requests currently in progress
+                  Requests currently moving through the pipeline
                 </p>
               </div>
             </div>
@@ -326,7 +415,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="rounded-[32px] border border-white/80 bg-white/85 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6">
+          <div className="rounded-[32px] border border-white/80 bg-white/90 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-red-50 p-3 text-red-500">
                 <FaCircleExclamation />
@@ -358,8 +447,8 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* All requests */}
-        <section className="mt-6 rounded-[32px] border border-white/80 bg-white/85 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6 lg:p-8">
+        {/* ALL REQUESTS */}
+        <section className="mt-6 rounded-[32px] border border-white/80 bg-white/90 p-5 shadow-[0_20px_50px_rgba(31,42,68,0.06)] sm:p-6 lg:p-8">
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-[#EEF2FF] p-3 text-[#6D5DF6]">
               <FaRegCircleCheck />
@@ -389,13 +478,13 @@ export default function Dashboard() {
                 No feature requests yet
               </p>
               <p className="mt-2 text-[#64748B]">
-                Submit your first request using the form above.
+                Start by using the highlighted request section above.
               </p>
             </div>
           )}
         </section>
 
-        {/* Footer */}
+        {/* FOOTER */}
         <footer className="pt-6 pb-2">
           <div className="rounded-[28px] border border-white/80 bg-white/80 px-6 py-6 shadow-[0_20px_50px_rgba(31,42,68,0.06)] backdrop-blur-sm sm:px-8 sm:py-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
