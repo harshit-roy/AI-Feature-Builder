@@ -1,12 +1,11 @@
 const FeatureRequest = require("../models/FeatureRequest")
-const generateReactPage = require("../services/aiService")
+const { generateReactPage, isValidGeneratedCode } = require("../services/aiService")
 const slugify = require("slugify")
 
-const isValidGeneratedCode = (code) => {
-  if (!code || typeof code !== "string") return false
-  if (!code.includes("const GeneratedPage")) return false
-  return true
-}
+
+
+
+
 
 const createUniqueSlug = async (prompt) => {
   const baseSlug = slugify(prompt, { lower: true, strict: true }) || "feature"
@@ -352,16 +351,55 @@ exports.deployFeature = async (req, res) => {
       return res.status(404).json({ message: "Feature not found" })
     }
 
-    if (!isValidGeneratedCode(feature.generatedCode)) {
-      return res.status(400).json({
-        message: "Invalid or empty code. Cannot deploy."
-      })
+    const validateCode = (code) => {
+      if (!code || typeof code !== "string" || !code.trim()) {
+        return { ok: false, reason: "Generated code is empty" }
+      }
+      if (!isValidGeneratedCode(code)) {
+        return { ok: false, reason: "Generated code failed GeneratedPage validation" }
+      }
+      return { ok: true, reason: "" }
+    }
+
+    // Validate before deploying.
+    const initialCheck = validateCode(feature.generatedCode)
+    if (!initialCheck.ok) {
+      // Best-effort auto-repair before failing deployment.
+      try {
+        const repairedCode = await generateReactPage(feature.prompt)
+        const repairedCheck = validateCode(repairedCode)
+
+        if (repairedCheck.ok) {
+          feature.generatedCode = repairedCode
+          feature.lastError = ""
+        } else {
+          feature.status = "failed"
+          feature.lastError = `Deployment blocked: ${repairedCheck.reason}`
+          await feature.save()
+          return res.status(400).json({ message: "Invalid or empty code. Cannot deploy." })
+        }
+      } catch (repairErr) {
+        feature.status = "failed"
+        feature.lastError = repairErr?.message || "Deployment blocked: AI repair failed"
+        await feature.save()
+        return res.status(400).json({ message: "Invalid or empty code. Cannot deploy." })
+      }
+    }
+
+    // Final guard: never mark deployed unless it passes validation.
+    const finalCheck = validateCode(feature.generatedCode)
+    if (!finalCheck.ok) {
+      feature.status = "failed"
+      feature.lastError = `Deployment blocked: ${finalCheck.reason}`
+      await feature.save().catch(() => {})
+      return res.status(400).json({ message: "Invalid or empty code. Cannot deploy." })
     }
 
     feature.status = "deployed"
     feature.deployedAt = new Date()
     feature.deployedUrl = `/live/${feature.pageSlug}`
     feature.lastError = ""
+
 
     await feature.save()
 
@@ -374,6 +412,7 @@ exports.deployFeature = async (req, res) => {
     return res.status(500).json({ message: "Deployment failed" })
   }
 }
+
 
 // rollback
 exports.rollbackFeature = async (req, res) => {

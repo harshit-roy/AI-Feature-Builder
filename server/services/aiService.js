@@ -8,37 +8,120 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 function sanitizeGeneratedCode(text) {
   let cleaned = text || ""
 
+  // Strip markdown fences
   cleaned = cleaned.replace(/```[a-z]*|```/gi, "").trim()
-  cleaned = cleaned.replace(/^import .*$/gm, "")
-  cleaned = cleaned.replace(/export\s+default\s+/g, "")
-  cleaned = cleaned.replace(/export\s+/g, "")
+
+  // Remove any stray HTML/markdown wrappers (best-effort)
+  cleaned = cleaned.replace(/^\s*<!DOCTYPE[\s\S]*?>/i, "")
+
+  // Line-based removal: imports/exports (keeps rest of line content out)
+  cleaned = cleaned.replace(/^\s*import\s+.*$/gm, "")
+  cleaned = cleaned.replace(/^\s*export\s+default\s+/gm, "")
+  cleaned = cleaned.replace(/^\s*export\s+\{[^}]*\}\s*;?\s*$/gm, "")
+  cleaned = cleaned.replace(/^\s*export\s+\*\s+from\s+.*$/gm, "")
+  cleaned = cleaned.replace(/^\s*export\s+\*\s*;\s*$/gm, "")
+  cleaned = cleaned.replace(/^\s*export\s+(const|function|class)\s+/gm, "$1 ")
+
+  // Token-based removal: residual export/import keywords
+  cleaned = cleaned.replace(/\bexport\b/g, "")
+  cleaned = cleaned.replace(/\bimport\b/g, "")
+
+  // Remove common invalid wrappers / entrypoints
+  cleaned = cleaned.replace(/ReactDOM\.render\s*\([\s\S]*?\);?/g, "")
+  cleaned = cleaned.replace(/ReactDOM\.createRoot\s*\([\s\S]*?\);?/g, "")
+  cleaned = cleaned.replace(/\bReactDOM\b/gi, "")
+  cleaned = cleaned.replace(/\bcreateRoot\s*\([\s\S]*?\);?/gi, "")
+
+  // Remove App component wrappers if present
   cleaned = cleaned.replace(/function\s+App\s*\([\s\S]*?\}\s*/g, "")
   cleaned = cleaned.replace(/const\s+App\s*=\s*\([\s\S]*?\}\s*;?/g, "")
 
-  const generatedConstStart = cleaned.indexOf("const GeneratedPage")
-  const generatedFnStart = cleaned.indexOf("function GeneratedPage")
+  // Hard strip any line containing banned tokens. This is intentionally aggressive,
+  // because a single leftover token can break iframe Babel runtime.
+  const bannedLineRE = /(\bimport\b|\bexport\b|ReactDOM\.|\bReactDOM\b|\bcreateRoot\b|ReactDOM\.createRoot|ReactDOM\.render)/i
+  cleaned = cleaned
+    .split("\n")
+    .filter((line) => !bannedLineRE.test(line))
+    .join("\n")
 
-  if (generatedConstStart !== -1) {
-    cleaned = cleaned.slice(generatedConstStart)
-  } else if (generatedFnStart !== -1) {
-    cleaned = cleaned.slice(generatedFnStart)
-  }
+  // Prefer extracting ONLY the GeneratedPage component.
+  const constGeneratedRE = /const\s+GeneratedPage\s*=\s*\([\s\S]*?\)\s*=>\s*\{[\s\S]*?\n\s*\}\s*\n?\s*;?/m
+  const fnGeneratedRE = /function\s+GeneratedPage\s*\([\s\S]*?\)\s*\{[\s\S]*?\n\s*\}\s*\n?\s*;?/m
+
+  const constMatch = cleaned.match(constGeneratedRE)
+  const fnMatch = cleaned.match(fnGeneratedRE)
+
+  if (constMatch?.[0]) return constMatch[0].trim()
+  if (fnMatch?.[0]) return fnMatch[0].trim()
+
+  // Fallback: slice from the first occurrence of GeneratedPage declaration.
+  const constStart = cleaned.indexOf("const GeneratedPage")
+  const fnStart = cleaned.indexOf("function GeneratedPage")
+  let firstPos = Number.POSITIVE_INFINITY
+  if (constStart !== -1) firstPos = constStart
+  if (fnStart !== -1) firstPos = Math.min(firstPos, fnStart)
+  if (firstPos !== Number.POSITIVE_INFINITY) cleaned = cleaned.slice(firstPos)
+
+  // Final hard removal for residual banned tokens.
+  cleaned = cleaned.replace(/\bReactDOM\b/gi, "")
+  cleaned = cleaned.replace(/\bcreateRoot\b/gi, "")
+  cleaned = cleaned.replace(/^\s*export\s+.*$/gm, "")
+  cleaned = cleaned.replace(/^\s*import\s+.*$/gm, "")
 
   return cleaned.trim()
 }
 
+
+
 /* -----------------------------
-   VALIDATION
+   VALIDATION (strict for iframe runtime)
 ----------------------------- */
 function isValidGeneratedCode(code) {
-  return (
-    !!code &&
-    typeof code === "string" &&
-    code.includes("GeneratedPage") &&
-    code.includes("return") &&
-    !code.includes("export default function App")
-  )
+  if (!code || typeof code !== "string") return false
+
+  const trimmed = code.trim()
+  if (!trimmed) return false
+
+  // Must include GeneratedPage and be structured as a single component.
+  if (!/\bGeneratedPage\b/.test(trimmed)) return false
+
+  // Must NOT contain blacklisted patterns (strict for iframe runtime)
+  const blacklist = [
+    /\bimport\b/i,
+    /\bexport\b/i,
+    /\bexport\s+default\b/i,
+    /ReactDOM\.render\b/i,
+    /ReactDOM\.createRoot\b/i,
+    /\bReactDOM\b/i,
+    /\bcreateRoot\b/i,
+    /\brequire\s*\(\s*['"][\s\S]*?['"]\s*\)/i,
+    /function\s+App\s*\(/i,
+    /const\s+App\s*=/i
+  ]
+
+  for (const re of blacklist) {
+    if (re.test(trimmed)) return false
+  }
+
+  // Must have ONE component declaration
+  const declConst = trimmed.match(/const\s+GeneratedPage\s*=\s*\(/g) || []
+  const declFn = trimmed.match(/function\s+GeneratedPage\s*\(/g) || []
+  const totalDecls = declConst.length + declFn.length
+  if (totalDecls !== 1) return false
+
+  // Must contain JSX-ish return from within the component
+  const hasReturn = /\breturn\b/.test(trimmed)
+  const hasJsxLike = /return\s*(\(|<)/.test(trimmed) || /return\s*<\w+/.test(trimmed)
+  if (!hasReturn || !hasJsxLike) return false
+
+  // Very small outputs are almost always invalid at runtime.
+  if (trimmed.length < 250) return false
+
+  return true
 }
+
+
+
 
 /* -----------------------------
    PROMPT TYPE CHECKS
@@ -1430,29 +1513,30 @@ async function generateReactPage(prompt) {
       primaryPrompt = buildGamePrompt(safePrompt)
     }
 
-    // Primary generation
+    // Pass 1: Generate
     const primaryText = await callGemini(primaryPrompt)
-    let cleaned = sanitizeGeneratedCode(primaryText)
 
-    if (isValidGeneratedCode(cleaned)) {
-      return cleaned
-    }
+    // Pass 2: Sanitize + Validate
+    let cleaned = sanitizeGeneratedCode(primaryText)
+    if (isValidGeneratedCode(cleaned)) return cleaned
 
     console.log(`⚠️ Primary generation invalid for mode "${mode}", trying repair pass...`)
 
-    // Repair pass
+    // Pass 3: Repair
+    // Feed the sanitized invalid code as the “bad code” input. This ensures the repair model
+    // focuses on producing a compliant single-component output for the iframe.
     const repairedText = await callGemini(
-      buildRepairPrompt(cleaned || primaryText, safePrompt, mode)
+      buildRepairPrompt(cleaned, safePrompt, mode)
     )
+
+
+    // Pass 4: Sanitize + Validate repaired output
     cleaned = sanitizeGeneratedCode(repairedText)
+    if (isValidGeneratedCode(cleaned)) return cleaned
 
-    if (isValidGeneratedCode(cleaned)) {
-      return cleaned
-    }
+    console.log(`⚠️ Repair pass invalid for mode "${mode}", trying final fallback repair...`)
 
-    console.log(`⚠️ Repair pass invalid for mode "${mode}", using fallback...`)
-
-    // Universal fallback
+    // Pass 5: Fallback generation (always compliant)
     return buildFallbackPage(safePrompt)
   } catch (err) {
     console.error("Gemini error:", err)
@@ -1460,4 +1544,10 @@ async function generateReactPage(prompt) {
   }
 }
 
-module.exports = generateReactPage
+
+module.exports = {
+  generateReactPage,
+  sanitizeGeneratedCode,
+  isValidGeneratedCode,
+}
+
