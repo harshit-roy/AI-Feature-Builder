@@ -1,5 +1,5 @@
 const FeatureRequest = require("../models/FeatureRequest")
-const { generateReactPage, isValidGeneratedCode } = require("../services/aiService")
+const { generateReactPage, isValidGeneratedCode, sanitizeGeneratedCode } = require("../services/aiService")
 const slugify = require("slugify")
 
 
@@ -323,9 +323,16 @@ exports.updateFeatureCode = async (req, res) => {
       return res.status(404).json({ message: "Feature not found" })
     }
 
-    feature.generatedCode = code.trim()
+    // Always sanitize before persisting, so the live iframe never receives unsafe import/export/ReactDOM bootstrap.
+    const sanitized = sanitizeGeneratedCode(code)
+    if (!isValidGeneratedCode(sanitized)) {
+      return res.status(400).json({ message: "Invalid or unsafe generated code" })
+    }
+
+    feature.generatedCode = sanitized.trim()
     feature.lastError = ""
     await feature.save()
+
 
     return res.json({
       message: "Code updated successfully",
