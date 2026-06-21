@@ -2,6 +2,12 @@ const FeatureRequest = require("../models/FeatureRequest")
 const generateReactPage = require("../services/aiService")
 const slugify = require("slugify")
 
+const { validateReactCode } = require("../services/validatorService")
+const { autoFixCode } = require("../services/autoFixService")
+const {
+  compileReactCode
+} = require("../services/compilerService")
+
 const isValidGeneratedCode = (code) => {
   if (!code || typeof code !== "string") return false
   if (!code.includes("const GeneratedPage")) return false
@@ -25,58 +31,186 @@ const createUniqueSlug = async (prompt) => {
 const runGenerationForRequest = async (request) => {
   request.status = "generating"
   request.lastError = ""
-  request.generationAttempts = (request.generationAttempts || 0) + 1
+  request.generationAttempts =
+    (request.generationAttempts || 0) + 1
+
   request.lastGeneratedAt = new Date()
+
   await request.save()
 
   try {
-    const code = await generateReactPage(request.prompt)
+    /*
+     * Generate raw AI code
+     */
+    const generatedCode =
+      await generateReactPage(request.prompt)
 
-    if (!isValidGeneratedCode(code)) {
+    /*
+     * First validation pass
+     */
+    const initialValidation =
+      validateReactCode(generatedCode)
+
+    /*
+     * Auto fix
+     */
+    const fixedCode =
+  autoFixCode(generatedCode)
+
+const finalValidation =
+  validateReactCode(fixedCode)
+
+let compiledCode = ""
+
+if (finalValidation.success) {
+
+try {
+  console.log("========== COMPILING ==========")
+
+  compiledCode =
+    await compileReactCode(
+      fixedCode
+    )
+
+  console.log("COMPILE SUCCESS")
+  console.log(
+    compiledCode.substring(0, 500)
+  )
+}
+catch (err) {
+  console.error(
+    "COMPILE FAILED:"
+  )
+
+  console.error(err)
+
+  throw err
+}
+}
+
+    if (!finalValidation.success) {
       request.status = "failed"
-      request.lastError = "Invalid AI output: GeneratedPage component missing"
+
+      request.lastError =
+        finalValidation.errors.join("\n")
+
+      request.validationStatus = "failed"
+
+      request.validationResults = {
+        syntaxValid:
+          finalValidation.syntaxValid,
+
+        jsxValid:
+          finalValidation.jsxValid,
+
+        componentFound:
+          finalValidation.componentFound,
+
+        importsValid:
+          finalValidation.importsValid,
+
+        exportsValid:
+          finalValidation.exportsValid,
+
+        validationPassed: false,
+
+        errors:
+          finalValidation.errors,
+
+        warnings:
+          finalValidation.warnings
+      }
+
       await request.save()
 
       return {
         success: false,
-        statusCode: 500,
-        message: "Invalid AI output",
+        statusCode: 400,
+        message:
+          "Generated code failed validation",
         request
       }
     }
 
-    const slug = request.pageSlug || (await createUniqueSlug(request.prompt))
+    const slug =
+      request.pageSlug ||
+      (await createUniqueSlug(request.prompt))
 
-    request.generatedCode = code
+    request.generatedCode = generatedCode
+
+    request.fixedCode = fixedCode
+    request.compiledCode =
+  compiledCode
+  console.log(
+  "FINAL COMPILED LENGTH:",
+  request.compiledCode.length
+)
     request.pageSlug = slug
+
     request.previewUrl = `/preview/${slug}`
+
     request.status = "approved"
+
     request.lastError = ""
+
+    request.validationStatus = "passed"
+
+    request.validationResults = {
+      syntaxValid:
+        finalValidation.syntaxValid,
+
+      jsxValid:
+        finalValidation.jsxValid,
+
+      componentFound:
+        finalValidation.componentFound,
+
+      importsValid:
+        finalValidation.importsValid,
+
+      exportsValid:
+        finalValidation.exportsValid,
+
+      validationPassed: true,
+
+      errors:
+        finalValidation.errors,
+
+      warnings:
+        finalValidation.warnings
+    }
 
     await request.save()
 
     return {
       success: true,
       statusCode: 200,
-      message: "Feature approved and AI page generated",
+      message:
+        "Feature approved and validated",
       request
     }
-  } catch (aiErr) {
-    console.error("AI generation error:", aiErr.message)
+  } catch (err) {
+    console.error(
+      "Generation pipeline error:",
+      err
+    )
 
     request.status = "failed"
-    request.lastError = aiErr.message || "AI generation failed"
+
+    request.lastError =
+      err.message || "Generation failed"
+
     await request.save()
 
     return {
       success: false,
       statusCode: 500,
-      message: "AI generation failed",
+      message:
+        "Generation failed",
       request
     }
   }
 }
-
 // create feature request
 exports.createRequest = async (req, res) => {
   try {
@@ -254,25 +388,76 @@ exports.getPreviewBySlug = async (req, res) => {
   try {
     const { slug } = req.params
 
-    const feature = await FeatureRequest.findOne({ pageSlug: slug })
+    const feature =
+      await FeatureRequest.findOne({
+        pageSlug: slug
+      })
 
     if (!feature) {
-      return res.status(404).json({ message: "Feature not found" })
+      return res.status(404).json({
+        message: "Feature not found"
+      })
     }
 
     return res.json({
-      generatedCode: feature.generatedCode || "",
-      prompt: feature.prompt,
-      status: feature.status,
-      pageSlug: feature.pageSlug,
-      previewUrl: feature.previewUrl || "",
-      lastError: feature.lastError || "",
-      generationAttempts: feature.generationAttempts || 0,
-      lastGeneratedAt: feature.lastGeneratedAt || null
+      generatedCode:
+        feature.generatedCode || "",
+
+      fixedCode:
+        feature.fixedCode || "",
+
+      prompt:
+        feature.prompt,
+
+      status:
+        feature.status,
+
+      pageSlug:
+        feature.pageSlug,
+
+      previewUrl:
+        feature.previewUrl || "",
+
+      deployedUrl:
+        feature.deployedUrl || "",
+
+      validationStatus:
+        feature.validationStatus || "pending",
+
+      validationResults:
+        feature.validationResults || {},
+
+      buildStatus:
+        feature.buildStatus || "not-started",
+
+      buildErrors:
+        feature.buildErrors || [],
+
+      buildLogs:
+        feature.buildLogs || [],
+
+      lastError:
+        feature.lastError || "",
+
+      generationAttempts:
+        feature.generationAttempts || 0,
+
+      lastGeneratedAt:
+        feature.lastGeneratedAt || null,
+
+      deploymentVersion:
+        feature.deploymentVersion || 0
     })
   } catch (err) {
-    console.error("Preview error:", err)
-    return res.status(500).json({ message: "Server error" })
+    console.error(
+      "Preview error:",
+      err
+    )
+
+    return res.status(500).json({
+      message:
+        "Server error"
+    })
   }
 }
 
@@ -281,24 +466,52 @@ exports.getPublicPageBySlug = async (req, res) => {
   try {
     const { slug } = req.params
 
-    const feature = await FeatureRequest.findOne({
-      pageSlug: slug,
-      status: "deployed"
-    })
+    const feature =
+      await FeatureRequest.findOne({
+        pageSlug: slug,
+        status: "deployed"
+      })
 
     if (!feature) {
-      return res.status(404).json({ message: "Page not found" })
+      return res.status(404).json({
+        message:
+          "Page not found"
+      })
     }
 
     return res.json({
-      generatedCode: feature.generatedCode,
-      prompt: feature.prompt,
-      pageSlug: feature.pageSlug,
-      deployedAt: feature.deployedAt || null
-    })
+  compiledCode:
+    feature.compiledCode || "",
+
+  generatedCode:
+    feature.fixedCode ||
+    feature.generatedCode,
+
+  validationStatus:
+    feature.validationStatus,
+
+  deployedAt:
+    feature.deployedAt,
+
+  deploymentVersion:
+    feature.deploymentVersion || 0,
+
+  pageSlug:
+    feature.pageSlug,
+
+  prompt:
+    feature.prompt
+})
   } catch (err) {
-    console.error("Public page error:", err)
-    return res.status(500).json({ message: "Server error" })
+    console.error(
+      "Public page error:",
+      err
+    )
+
+    return res.status(500).json({
+      message:
+        "Server error"
+    })
   }
 }
 
@@ -308,36 +521,104 @@ exports.updateFeatureCode = async (req, res) => {
     const { slug } = req.params
     const { code } = req.body
 
-    if (!code || typeof code !== "string" || !code.trim()) {
-      return res.status(400).json({ message: "Valid code is required" })
-    }
-
-    if (!isValidGeneratedCode(code)) {
+    if (!code || typeof code !== "string") {
       return res.status(400).json({
-        message: "Invalid code format (GeneratedPage missing)"
+        message: "Valid code is required"
       })
     }
 
-    const feature = await FeatureRequest.findOne({ pageSlug: slug })
+    const feature = await FeatureRequest.findOne({
+      pageSlug: slug
+    })
 
     if (!feature) {
-      return res.status(404).json({ message: "Feature not found" })
+      return res.status(404).json({
+        message: "Feature not found"
+      })
     }
 
+    const fixedCode =
+  autoFixCode(code)
+
+const validation =
+  validateReactCode(fixedCode)
+
+let compiledCode = ""
+
+if (validation.success) {
+  compiledCode =
+    await compileReactCode(
+      fixedCode
+    )
+}
+
     feature.generatedCode = code.trim()
-    feature.lastError = ""
+
+    feature.fixedCode = fixedCode
+    feature.compiledCode =
+  compiledCode
+
+    feature.validationStatus =
+      validation.success
+        ? "passed"
+        : "failed"
+
+    feature.validationResults = {
+      syntaxValid:
+        validation.syntaxValid,
+
+      jsxValid:
+        validation.jsxValid,
+
+      componentFound:
+        validation.componentFound,
+
+      importsValid:
+        validation.importsValid,
+
+      exportsValid:
+        validation.exportsValid,
+
+      validationPassed:
+        validation.success,
+
+      errors:
+        validation.errors,
+
+      warnings:
+        validation.warnings
+    }
+
+    feature.lastError =
+      validation.success
+        ? ""
+        : validation.errors.join("\n")
+
     await feature.save()
 
+    if (!validation.success) {
+      return res.status(400).json({
+        message:
+          "Validation failed",
+        validation
+      })
+    }
+
     return res.json({
-      message: "Code updated successfully",
-      feature: {
-        pageSlug: feature.pageSlug,
-        status: feature.status
-      }
+      message:
+        "Code saved successfully",
+      validation
     })
   } catch (err) {
-    console.error("Update code error:", err)
-    return res.status(500).json({ message: "Failed to update code" })
+    console.error(
+      "Update code error:",
+      err
+    )
+
+    return res.status(500).json({
+      message:
+        "Failed to update code"
+    })
   }
 }
 
@@ -346,32 +627,79 @@ exports.deployFeature = async (req, res) => {
   try {
     const { slug } = req.params
 
-    const feature = await FeatureRequest.findOne({ pageSlug: slug })
+    const feature =
+      await FeatureRequest.findOne({
+        pageSlug: slug
+      })
 
     if (!feature) {
-      return res.status(404).json({ message: "Feature not found" })
-    }
-
-    if (!isValidGeneratedCode(feature.generatedCode)) {
-      return res.status(400).json({
-        message: "Invalid or empty code. Cannot deploy."
+      return res.status(404).json({
+        message:
+          "Feature not found"
       })
     }
 
-    feature.status = "deployed"
-    feature.deployedAt = new Date()
-    feature.deployedUrl = `/live/${feature.pageSlug}`
+    const validation =
+      validateReactCode(
+        feature.fixedCode ||
+        feature.generatedCode
+      )
+
+    if (!validation.success) {
+      feature.validationStatus =
+        "failed"
+
+      feature.lastError =
+        validation.errors.join("\n")
+
+      await feature.save()
+
+      return res.status(400).json({
+        message:
+          "Deployment blocked. Validation failed.",
+        validation
+      })
+    }
+
+    feature.status =
+      "deployed"
+    if (!feature.compiledCode) {
+  feature.compiledCode =
+    await compileReactCode(
+      feature.fixedCode ||
+      feature.generatedCode
+    )
+
+  await feature.save()
+}
+    feature.deployedAt =
+      new Date()
+
+    feature.deployedUrl =
+      `/live/${feature.pageSlug}`
+
     feature.lastError = ""
+
+    feature.validationStatus =
+      "passed"
 
     await feature.save()
 
     return res.json({
-      message: "Feature deployed successfully",
+      message:
+        "Feature deployed successfully",
       feature
     })
   } catch (err) {
-    console.error("Deploy error:", err)
-    return res.status(500).json({ message: "Deployment failed" })
+    console.error(
+      "Deploy error:",
+      err
+    )
+
+    return res.status(500).json({
+      message:
+        "Deployment failed"
+    })
   }
 }
 

@@ -2,6 +2,11 @@ const { GoogleGenerativeAI } = require("@google/generative-ai")
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
 
+const {
+  enhancePrompt
+} = require("./promptEnhancer")
+
+
 /* -----------------------------
    CLEAN AI OUTPUT
 ----------------------------- */
@@ -14,7 +19,23 @@ function sanitizeGeneratedCode(text) {
   cleaned = cleaned.replace(/export\s+/g, "")
   cleaned = cleaned.replace(/function\s+App\s*\([\s\S]*?\}\s*/g, "")
   cleaned = cleaned.replace(/const\s+App\s*=\s*\([\s\S]*?\}\s*;?/g, "")
+  cleaned = cleaned.replace(
+  /import\s+React\s*,\s*\{[^}]+\}\s+from\s+["']react["'];?/g,
+  ""
+)
 
+cleaned = cleaned.replace(
+  /import\s+\{[^}]+\}\s+from\s+["']react["'];?/g,
+  ""
+)
+
+cleaned = cleaned.replace(
+  /import\s+React\s+from\s+["']react["'];?/g,
+  ""
+)
+
+  cleaned = normalizeReactHooks(cleaned)
+  cleaned = cleaned.replace(/React\.React\./g, "React.")
   const generatedConstStart = cleaned.indexOf("const GeneratedPage")
   const generatedFnStart = cleaned.indexOf("function GeneratedPage")
 
@@ -26,18 +47,59 @@ function sanitizeGeneratedCode(text) {
 
   return cleaned.trim()
 }
+function normalizeReactHooks(code) {
+  return code
 
+    // Fix double React
+    .replace(/React\.React\.useState\(/g, "React.useState(")
+    .replace(/React\.React\.useEffect\(/g, "React.useEffect(")
+    .replace(/React\.React\.useRef\(/g, "React.useRef(")
+    .replace(/React\.React\.useMemo\(/g, "React.useMemo(")
+    .replace(/React\.React\.useCallback\(/g, "React.useCallback(")
+    .replace(/React\.React\.useReducer\(/g, "React.useReducer(")
+    .replace(/React\.React\.useContext\(/g, "React.useContext(")
+
+    // Fix imported hooks
+    .replace(/\buseState\(/g, "React.useState(")
+    .replace(/\buseEffect\(/g, "React.useEffect(")
+    .replace(/\buseRef\(/g, "React.useRef(")
+    .replace(/\buseMemo\(/g, "React.useMemo(")
+    .replace(/\buseCallback\(/g, "React.useCallback(")
+    .replace(/\buseReducer\(/g, "React.useReducer(")
+    .replace(/\buseContext\(/g, "React.useContext(")
+}
 /* -----------------------------
    VALIDATION
 ----------------------------- */
 function isValidGeneratedCode(code) {
-  return (
-    !!code &&
-    typeof code === "string" &&
-    code.includes("GeneratedPage") &&
-    code.includes("return") &&
-    !code.includes("export default function App")
-  )
+  if (!code || typeof code !== "string") {
+    return false
+  }
+
+  if (!code.includes("GeneratedPage")) {
+    return false
+  }
+
+  if (!code.includes("return")) {
+    return false
+  }
+
+  const forbidden = [
+    "import ",
+    "export default",
+    "require(",
+    "process.",
+    "fs.",
+    "child_process"
+  ]
+
+  for (const item of forbidden) {
+    if (code.includes(item)) {
+      return false
+    }
+  }
+
+  return true
 }
 
 /* -----------------------------
@@ -1255,45 +1317,19 @@ ${buildStorageBridgeHelpers("afb_page_generic_fallback", "{ notes: {}, inputs: {
 ----------------------------- */
 function buildCommonRules() {
   return `
-STRICT OUTPUT RULES:
+RULES
 
-1. Create ONLY one top-level component named GeneratedPage.
-2. Do NOT write import statements.
-3. Do NOT write export statements.
-4. Do NOT create an App component.
-5. Output must be valid JSX that compiles in a React environment.
-6. All UI and logic must stay inside the GeneratedPage component scope.
-7. The component must return a single root <div>.
-8. Return ONLY React code.
-9. Do NOT include markdown fences.
-10. Do NOT include explanations or prose outside the code.
-11. Do NOT use TypeScript.
-12. Do NOT use external APIs, remote assets, or external libraries.
-
-REACT RULES:
-
-1. Use React.useState and React.useEffect when needed.
-2. Helper functions inside GeneratedPage are allowed and encouraged.
-3. Complex internal logic is allowed.
-4. Nested render helpers inside GeneratedPage are allowed.
-5. Avoid native form submission navigation. Use e.preventDefault() where needed.
-6. The code must not crash if rendered directly.
-
-PERSISTENCE RULES:
-
-1. If the page contains user-created state, progress, drafts, tasks, notes, tracker items, game progress, form values, or interactive session state, you MUST persist it.
-2. Prefer window.afbStorage.getItem(key) and window.afbStorage.setItem(key, value) if available.
-3. If unavailable, fall back to localStorage.
-4. Use React.useState lazy initialization and React.useEffect for syncing persisted state.
-5. Wrap parsing in try/catch and use safe defaults.
-
-STYLING RULES:
-
-1. Do NOT use Tailwind CSS.
-2. Do NOT use external CSS files.
-3. Use inline styles and/or a <style>{\`...\`}</style> block inside the component.
-4. Create a premium, modern, responsive UI.
-5. Strong spacing, rounded corners, shadows, and clear typography are required.
+- Component name must be GeneratedPage
+- No imports
+- No exports
+- No external libraries
+- Use React.useState and React.useEffect
+- All buttons must work
+- All forms must work
+- Support mobile and desktop
+- Use modern clean styling
+- Use localStorage or window.afbStorage if persistence is needed
+- Return only React code
 `
 }
 
@@ -1301,7 +1337,13 @@ function buildPagePrompt(userPrompt) {
   return `
 You are a senior frontend engineer and UI/UX designer.
 Generate a polished, production-inspired responsive webpage for the following request.
+Build a complete application.
 
+Do not simplify the request.
+
+Do not replace requested functionality.
+
+Preserve user intent exactly.
 ${buildCommonRules()}
 
 PAGE QUALITY RULES:
@@ -1318,46 +1360,41 @@ Return ONLY valid React code.
 `
 }
 
-function buildToolPrompt(userPrompt) {
+function buildToolPrompt(prompt) {
   return `
-You are a senior frontend engineer building an interactive mini-application or business tool.
-
 ${buildCommonRules()}
 
-TOOL QUALITY RULES:
+Create a working interactive tool.
 
-1. Prioritize functionality and usability first, while keeping the UI polished.
-2. Interactive logic must work correctly.
-3. Validation should be sensible and lightweight.
-4. The result should feel like a usable app, not a static mockup.
+Requirements:
+- Functional UI
+- Good user experience
+- Responsive design
+- Save user data if needed
 
-Feature to build:
-${userPrompt}
+Request:
+${prompt}
 
-Return ONLY valid React code.
+Return only React code.
 `
 }
 
-function buildGamePrompt(userPrompt) {
+function buildGamePrompt(prompt) {
   return `
-You are a senior frontend engineer building a browser-based interactive game or puzzle.
-
 ${buildCommonRules()}
 
-GAME QUALITY RULES:
+Create a playable game.
 
-1. Prioritize working game logic over visual ornamentation.
-2. Internal helper functions and structured logic inside GeneratedPage are strongly encouraged.
-3. Use clear state modeling.
-4. The result must be actually playable, not just themed UI.
-5. Persist game progress, board state, score, history, or session progress when relevant.
-6. Avoid oversimplifying the logic into a static placeholder.
-7. Keep the UI visually polished, but do not sacrifice functionality.
+Requirements:
+- Game must function
+- Restart button
+- Responsive UI
+- Clean design
 
-Feature to build:
-${userPrompt}
+Request:
+${prompt}
 
-Return ONLY valid React code.
+Return only React code.
 `
 }
 
@@ -1370,6 +1407,26 @@ ${mode}
 
 ORIGINAL FEATURE:
 ${originalPrompt}
+
+React Hook Rules
+
+Always use:
+
+React.useState(...)
+React.useEffect(...)
+React.useRef(...)
+React.useMemo(...)
+React.useCallback(...)
+React.useReducer(...)
+
+Never use:
+
+useState(...)
+useEffect(...)
+useRef(...)
+useMemo(...)
+useCallback(...)
+useReducer(...)
 
 RULES:
 1. Component name must be GeneratedPage.
@@ -1391,72 +1448,181 @@ ${badCode}
    GEMINI CALL
 ----------------------------- */
 async function callGemini(promptText) {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash-lite"
-  })
 
-  const result = await model.generateContent(promptText)
-  const response = await result.response
-  return response.text()
+  const models = [
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite"
+  ]
+
+  let lastError = null
+
+  for (const modelName of models) {
+
+    try {
+
+      console.log(
+        `Trying ${modelName}`
+      )
+
+      const model =
+        genAI.getGenerativeModel({
+          model: modelName
+        })
+
+      const result =
+        await model.generateContent(
+          promptText
+        )
+
+      const response =
+        await result.response
+
+      return response.text()
+
+    } catch (error) {
+
+      lastError = error
+
+      if (error.status !== 429) {
+        throw error
+      }
+    }
+  }
+
+  throw lastError
 }
 
 /* -----------------------------
    MAIN GENERATOR
 ----------------------------- */
 async function generateReactPage(prompt) {
-  const safePrompt = normalizePrompt(prompt)
-  const mode = classifyPrompt(safePrompt)
+
+  const safePrompt =
+    normalizePrompt(prompt)
+
+  const mode =
+    classifyPrompt(safePrompt)
 
   try {
-    if (mode === "todo") {
-      return buildTodoTemplate(safePrompt)
-    }
 
-    if (mode === "notes") {
-      return buildNotesTemplate()
-    }
+    const enhancedPrompt =
+      enhancePrompt(safePrompt)
 
-    if (mode === "tracker") {
-      return buildTrackerTemplate()
-    }
-
-    let primaryPrompt = buildPagePrompt(safePrompt)
+    let primaryPrompt =
+      buildPagePrompt(
+        enhancedPrompt
+      )
 
     if (mode === "tool") {
-      primaryPrompt = buildToolPrompt(safePrompt)
+      primaryPrompt =
+        buildToolPrompt(
+          enhancedPrompt
+        )
     }
 
     if (mode === "game") {
-      primaryPrompt = buildGamePrompt(safePrompt)
+      primaryPrompt =
+        buildGamePrompt(
+          enhancedPrompt
+        )
     }
 
-    // Primary generation
-    const primaryText = await callGemini(primaryPrompt)
-    let cleaned = sanitizeGeneratedCode(primaryText)
+    const MAX_ATTEMPTS = 1
 
-    if (isValidGeneratedCode(cleaned)) {
+    let cleaned = ""
+
+    for (
+      let attempt = 1;
+      attempt <= MAX_ATTEMPTS;
+      attempt++
+    ) {
+
+      console.log(
+        `AI Generation Attempt ${attempt}/${MAX_ATTEMPTS}`
+      )
+
+      const primaryText =
+        await callGemini(
+          primaryPrompt
+        )
+
+      cleaned =
+        sanitizeGeneratedCode(
+          primaryText
+        )
+
+      if (
+        !isValidGeneratedCode(
+          cleaned
+        )
+      ) {
+
+        console.log(
+          "Invalid React output"
+        )
+
+        continue
+      }
+
+      console.log(
+        "Valid React code generated"
+      )
+
       return cleaned
     }
 
-    console.log(`⚠️ Primary generation invalid for mode "${mode}", trying repair pass...`)
-
-    // Repair pass
-    const repairedText = await callGemini(
-      buildRepairPrompt(cleaned || primaryText, safePrompt, mode)
+    console.log(
+      "Generation attempts failed. Trying repair pass."
     )
-    cleaned = sanitizeGeneratedCode(repairedText)
 
-    if (isValidGeneratedCode(cleaned)) {
-      return cleaned
+    const repairPrompt =
+      buildRepairPrompt(
+        cleaned,
+        safePrompt,
+        mode
+      )
+
+    const repairedText =
+      await callGemini(
+        repairPrompt
+      )
+
+    const repairedCode =
+      sanitizeGeneratedCode(
+        repairedText
+      )
+
+    if (
+      isValidGeneratedCode(
+        repairedCode
+      )
+    ) {
+
+      console.log(
+        "Repair successful"
+      )
+
+      return repairedCode
     }
 
-    console.log(`⚠️ Repair pass invalid for mode "${mode}", using fallback...`)
+    console.log(
+      "Repair failed. Using fallback."
+    )
 
-    // Universal fallback
-    return buildFallbackPage(safePrompt)
+    return buildFallbackPage(
+      safePrompt
+    )
+
   } catch (err) {
-    console.error("Gemini error:", err)
-    return buildFallbackPage(safePrompt)
+
+    console.error(
+      "Generation Error:",
+      err
+    )
+
+    return buildFallbackPage(
+      safePrompt
+    )
   }
 }
 
